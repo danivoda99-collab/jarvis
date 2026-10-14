@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 
 export const GOOGLE_COOKIE = "argus_google";
@@ -33,15 +33,17 @@ function openToken(sealed: string): string | null {
   }
 }
 
-export function oauthState(): string {
-  return createHmac("sha256", secretKey()).update("google-oauth-state").digest("hex").slice(0, 32);
+export const STATE_COOKIE = "argus_google_state";
+
+export function newOauthState(): string {
+  return randomBytes(16).toString("hex");
 }
 
 export function redirectUri(origin: string): string {
   return `${origin}/api/google/callback`;
 }
 
-export function consentUrl(origin: string): string {
+export function consentUrl(origin: string, state: string): string {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
     redirect_uri: redirectUri(origin),
@@ -49,7 +51,7 @@ export function consentUrl(origin: string): string {
     scope: SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
-    state: oauthState(),
+    state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }

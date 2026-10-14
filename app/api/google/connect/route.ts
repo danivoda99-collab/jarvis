@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { consentUrl } from "@/lib/google";
+import { STATE_COOKIE, consentUrl, newOauthState } from "@/lib/google";
 
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
@@ -11,5 +11,15 @@ export async function GET(request: Request) {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   }
-  return NextResponse.redirect(consentUrl(origin));
+  // Doar cine e logat primește acest cod unic; întoarcerea de la Google trebuie să-l aducă înapoi.
+  const state = newOauthState();
+  const response = NextResponse.redirect(consentUrl(origin, state));
+  response.cookies.set(STATE_COOKIE, state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/api/google",
+    maxAge: 600,
+  });
+  return response;
 }
