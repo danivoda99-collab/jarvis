@@ -28,8 +28,8 @@ export default function Login() {
   return (
     <main className="screen">
       <div className="brand">
-        <span className="brand-mark">J</span>
-        <span className="brand-name">JARVIS</span>
+        <span className="brand-mark">A</span>
+        <span className="brand-name">ARGUS</span>
       </div>
       <form className="login" onSubmit={submit}>
         <label htmlFor="code">Codul tău de acces</label>

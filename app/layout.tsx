@@ -2,12 +2,12 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "JARVIS",
+  title: "ARGUS",
   description: "Asistentul personal al lui Daniel",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "JARVIS",
+    title: "ARGUS",
     statusBarStyle: "black-translucent",
   },
   icons: {

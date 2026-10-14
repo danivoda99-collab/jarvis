@@ -1,6 +1,6 @@
 {
-  "name": "JARVIS",
-  "short_name": "JARVIS",
+  "name": "ARGUS",
+  "short_name": "ARGUS",
   "description": "Asistentul personal al lui Daniel",
   "start_url": "/",
   "display": "standalone",

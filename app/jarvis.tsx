@@ -57,7 +57,7 @@ function Assistant() {
   const connected = status === "connected";
   const busy = starting || status === "connecting";
 
-  // Nucleul și indicatorul de semnal urmăresc volumul: vocea lui JARVIS când vorbește, a ta când asculți.
+  // Nucleul și indicatorul de semnal urmăresc volumul: vocea lui ARGUS când vorbește, a ta când asculți.
   useEffect(() => {
     const setLevel = (value: number) => {
       hudRef.current?.style.setProperty("--level", value.toFixed(3));
@@ -134,7 +134,7 @@ function Assistant() {
     connecting: "Mă conectez...",
     idle: "Atinge nucleul ca să vorbești",
     listening: "Te ascult...",
-    speaking: "JARVIS vorbește",
+    speaking: "ARGUS vorbește",
   }[hudState];
   const link = { connecting: "Conectare", idle: "În așteptare", listening: "Activ", speaking: "Activ" }[hudState];
 
@@ -142,8 +142,8 @@ function Assistant() {
     <main className="console">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">J</span>
-          <span className="brand-name">JARVIS</span>
+          <span className="brand-mark">A</span>
+          <span className="brand-name">ARGUS</span>
         </div>
         <div className="clock" suppressHydrationWarning>
           <span className="clock-time">{now ? timeOf(now) : "--:--"}</span>
@@ -193,7 +193,7 @@ function Assistant() {
           {lines.map((line, index) => (
             <p key={index} className={`log-line log-${line.role}`}>
               <span className="log-meta">
-                {line.at} · {line.role === "user" ? "Daniel" : "JARVIS"}
+                {line.at} · {line.role === "user" ? "Daniel" : "ARGUS"}
               </span>
               {line.text}
             </p>

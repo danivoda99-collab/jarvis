@@ -10,7 +10,7 @@ type Props = {
   label: string;
 };
 
-// Nucleul JARVIS: inele HUD care se rotesc în jurul unui miez luminos.
+// Nucleul ARGUS: inele HUD care se rotesc în jurul unui miez luminos.
 // --level (0..1), setat din afară, mărește strălucirea după volumul vocii.
 const Hud = forwardRef<HTMLButtonElement, Props>(function Hud({ state, onToggle, label }, ref) {
   return (
