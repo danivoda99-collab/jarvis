@@ -56,59 +56,6 @@ body {
   font-size: 16px;
 }
 
-/* Orbul: butonul principal. --level (0..1) vine din volumul vocii. */
-.orb {
-  --level: 0;
-  margin-top: 10vh;
-  width: min(64vw, 280px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  background: radial-gradient(circle at 50% 40%, var(--flame) 0%, var(--flame-deep) 55%, #3a1606 100%);
-  box-shadow:
-    0 0 calc(30px + var(--level) * 70px) rgba(255, 106, 19, calc(0.25 + var(--level) * 0.5)),
-    inset 0 0 0 2px rgba(212, 166, 74, 0.6);
-  transform: scale(calc(1 + var(--level) * 0.08));
-  transition: transform 80ms linear, box-shadow 80ms linear, filter 300ms ease;
-  display: grid;
-  place-items: center;
-}
-
-.orb-core {
-  width: 38%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--ivory) 0%, rgba(244, 236, 216, 0.15) 70%);
-  opacity: 0.85;
-}
-
-.orb-idle {
-  filter: saturate(0.75) brightness(0.85);
-  animation: breathe 3.2s ease-in-out infinite;
-}
-
-.orb-listening {
-  box-shadow:
-    0 0 calc(30px + var(--level) * 70px) rgba(244, 236, 216, calc(0.2 + var(--level) * 0.5)),
-    inset 0 0 0 3px var(--ivory);
-}
-
-.orb-busy {
-  animation: breathe 0.9s ease-in-out infinite;
-}
-
-@keyframes breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.04);
-  }
-}
-
 .status {
   font-size: 20px;
   font-weight: 600;
@@ -125,35 +72,6 @@ body {
   font-size: 15px;
   text-align: center;
   max-width: 340px;
-}
-
-.transcript {
-  width: 100%;
-  max-width: 480px;
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.line {
-  font-size: 15px;
-  line-height: 1.4;
-  padding: 10px 14px;
-  border-radius: 14px;
-  max-width: 85%;
-}
-
-.line-user {
-  align-self: flex-end;
-  background: var(--black-soft);
-  color: var(--ivory-muted);
-}
-
-.line-agent {
-  align-self: flex-start;
-  background: rgba(212, 166, 74, 0.12);
-  border: 1px solid rgba(212, 166, 74, 0.35);
 }
 
 .login {
@@ -191,4 +109,382 @@ body {
 
 .login button:disabled {
   opacity: 0.5;
+}
+
+/* ---------- Consola JARVIS ---------- */
+
+.console {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "top"
+    "center"
+    "right";
+  gap: 16px;
+  padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  background:
+    radial-gradient(90% 60% at 50% 42%, rgba(255, 106, 19, 0.12) 0%, transparent 60%),
+    linear-gradient(rgba(212, 166, 74, 0.05) 1px, transparent 1px) 0 0 / 100% 32px,
+    linear-gradient(90deg, rgba(212, 166, 74, 0.05) 1px, transparent 1px) 0 0 / 32px 100%,
+    var(--black);
+}
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+.clock-time {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ivory);
+  letter-spacing: 0.06em;
+}
+
+.clock-date {
+  font-size: 12px;
+  color: var(--ivory-muted);
+}
+
+.clock-date::first-letter {
+  text-transform: uppercase;
+}
+
+.center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-top: 4vh;
+}
+
+.panel {
+  border: 1px solid rgba(212, 166, 74, 0.28);
+  border-radius: 14px;
+  background: rgba(23, 23, 26, 0.72);
+  padding: 14px 16px;
+  position: relative;
+}
+
+/* Colțuri HUD pe panouri */
+.panel::before,
+.panel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: var(--gold);
+  border-style: solid;
+}
+
+.panel::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+  border-top-left-radius: 14px;
+}
+
+.panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+  border-bottom-right-radius: 14px;
+}
+
+.panel-left {
+  display: none;
+}
+
+.panel-right {
+  grid-area: right;
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 10px;
+}
+
+.panel-title + .readout,
+.readout + .panel-title {
+  margin-top: 4px;
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.readout div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.readout dt {
+  color: var(--ivory-muted);
+}
+
+.readout dd.ok {
+  color: var(--flame);
+}
+
+.meter {
+  --level: 0;
+  display: block;
+  width: 90px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--flame) calc(var(--level) * 100%), rgba(244, 236, 216, 0.12) 0);
+}
+
+.modules {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.modules li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ivory-muted);
+}
+
+.modules .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--ivory-muted);
+}
+
+.modules li.ready {
+  color: var(--ivory);
+}
+
+.modules li.ready .dot {
+  background: var(--flame);
+  border-color: var(--flame);
+  box-shadow: 0 0 8px var(--flame);
+}
+
+.module-state {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 32vh;
+  overflow-y: auto;
+}
+
+.log-empty {
+  color: var(--ivory-muted);
+  font-size: 14px;
+}
+
+.log-line {
+  font-size: 15px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.log-meta {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ivory-muted);
+}
+
+.log-agent .log-meta {
+  color: var(--gold);
+}
+
+.log-user {
+  color: var(--ivory-muted);
+}
+
+/* ---------- Nucleul HUD ---------- */
+
+.hud {
+  --level: 0;
+  width: min(78vw, 340px);
+  aspect-ratio: 1;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  filter: drop-shadow(0 0 calc(18px + var(--level) * 40px) rgba(255, 106, 19, calc(0.25 + var(--level) * 0.45)));
+  transition: filter 90ms linear;
+}
+
+.hud-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.hud circle,
+.hud path {
+  fill: none;
+}
+
+.hud .core {
+  fill: url(#core-fill);
+  transform-origin: 200px 200px;
+  transform: scale(calc(0.92 + var(--level) * 0.16));
+  transition: transform 80ms linear;
+}
+
+.stroke-gold {
+  stroke: var(--gold);
+  stroke-width: 1.5;
+}
+
+.stroke-gold-faint {
+  stroke: rgba(212, 166, 74, 0.3);
+  stroke-width: 1;
+}
+
+.stroke-flame {
+  stroke: var(--flame);
+}
+
+.stroke-ivory {
+  stroke: var(--ivory);
+}
+
+.arc-bold {
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.ticks {
+  stroke: rgba(212, 166, 74, 0.7);
+  stroke-width: 10;
+}
+
+.segments {
+  stroke-width: 4;
+  opacity: 0.85;
+}
+
+.arcs {
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.8;
+}
+
+.core-edge {
+  stroke-width: 2;
+}
+
+.ring {
+  transform-origin: 200px 200px;
+  animation: spin linear infinite;
+}
+
+.ring-outer {
+  animation-duration: 60s;
+}
+
+.ring-middle {
+  animation-duration: 28s;
+  animation-direction: reverse;
+}
+
+.ring-inner {
+  animation-duration: 14s;
+}
+
+/* Stările: în așteptare e totul mai stins și mai lent */
+.hud-idle .ring {
+  animation-duration: 90s;
+}
+
+.hud-idle {
+  opacity: 0.78;
+}
+
+.hud-connecting .ring {
+  animation-duration: 3s;
+}
+
+.hud-listening .arcs {
+  stroke: var(--ivory);
+  opacity: 1;
+}
+
+.hud-speaking .segments {
+  stroke: #ffb05a;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring {
+    animation: none;
+  }
+}
+
+/* ---------- Desktop: consola cu panouri laterale ---------- */
+
+@media (min-width: 960px) {
+  .console {
+    grid-template-columns: 280px 1fr 340px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "top top top"
+      "left center right";
+    gap: 24px;
+    padding: 28px 32px;
+  }
+
+  .panel-left {
+    display: block;
+    grid-area: left;
+    align-self: center;
+  }
+
+  .panel-right {
+    align-self: center;
+  }
+
+  .log {
+    max-height: 56vh;
+  }
+
+  .hud {
+    width: min(46vh, 440px);
+  }
 }
