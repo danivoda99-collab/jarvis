@@ -20,8 +20,9 @@ export default function Login() {
       window.location.reload();
       return;
     }
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
     setBusy(false);
-    setError("Cod greșit. Mai încearcă.");
+    setError(response.status === 401 ? "Cod greșit. Mai încearcă." : data.error || "Ceva n-a mers.");
   }
 
   return (
@@ -37,6 +38,9 @@ export default function Login() {
           type="password"
           inputMode="text"
           autoComplete="current-password"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           value={code}
           onChange={(event) => setCode(event.target.value)}
           autoFocus
