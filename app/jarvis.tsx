@@ -7,18 +7,19 @@ import CardStack, { type Answer, type Card } from "./cards";
 
 type Line = { role: "user" | "agent"; text: string; at: string };
 
-const MODULES: { name: string; ready: boolean }[] = [
+const MODULES: { name: string; ready: boolean; google?: boolean }[] = [
   { name: "Voce", ready: true },
-  { name: "Agendă", ready: false },
-  { name: "Listă to-do", ready: false },
+  { name: "Ferestre", ready: true },
+  { name: "Agendă", ready: true, google: true },
+  { name: "Listă to-do", ready: true, google: true },
   { name: "Buget", ready: false },
   { name: "Muzică", ready: false },
 ];
 
-export default function Jarvis() {
+export default function Jarvis({ googleConnected = false }: { googleConnected?: boolean }) {
   return (
     <ConversationProvider>
-      <Assistant />
+      <Assistant googleConnected={googleConnected} />
     </ConversationProvider>
   );
 }
@@ -52,7 +53,7 @@ function asList(value: unknown): string[] {
 
 const CONFIRM_TIMEOUT_MS = 90_000;
 
-function Assistant() {
+function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const answers = useRef(new Map<string, (answer: Answer | "fără răspuns") => void>());
@@ -62,6 +63,19 @@ function Assistant() {
   const meterRef = useRef<HTMLSpanElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const now = useClock();
+  const [googleNotice, setGoogleNotice] = useState("");
+
+  // Mesajul de după conectarea la Google (?google=conectat).
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("google");
+    if (!result) return;
+    setGoogleNotice(
+      result === "conectat"
+        ? "Google e conectat. Argus îți vede acum agenda și lista de to-do."
+        : "Conectarea la Google n-a mers. Mai încearcă.",
+    );
+    window.history.replaceState(null, "", "/");
+  }, []);
 
   function addCard(card: Card) {
     setCards((previous) => [...previous.filter((item) => item.kind === "confirm"), card].slice(-4));
@@ -75,6 +89,35 @@ function Assistant() {
     answers.current.get(id)?.(answer);
     answers.current.delete(id);
     closeCard(id);
+  }
+
+  // Afișează o fereastră Da/Nu și așteaptă atingerea lui Daniel.
+  function confirm(title: string, details: string, recipient?: string) {
+    const id = crypto.randomUUID();
+    addCard({ id, kind: "confirm", title, details, recipient });
+    return new Promise<Answer | "fără răspuns">((resolve) => {
+      const timer = setTimeout(() => settle(id, "fără răspuns"), CONFIRM_TIMEOUT_MS);
+      answers.current.set(id, (answer) => {
+        clearTimeout(timer);
+        resolve(answer);
+      });
+    });
+  }
+
+  async function callApi(path: string, method = "GET", body?: unknown): Promise<string> {
+    try {
+      const response = await fetch(path, {
+        method,
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok) return `Eroare: ${data.error ?? response.status}`;
+      return data.ok && Object.keys(data).length === 1 ? "Gata, făcut." : JSON.stringify(data);
+    } catch {
+      return "Eroare: nu am putut ajunge la server.";
+    }
   }
 
   // Unelte pe care agentul ARGUS le cheamă ca să arate ferestre pe ecran.
@@ -98,28 +141,54 @@ function Assistant() {
       });
       return "Lista e afișată pe ecran.";
     },
-    cere_confirmare: (parameters: { titlu?: unknown; detalii?: unknown; destinatar?: unknown }) => {
-      const id = crypto.randomUUID();
-      addCard({
-        id,
-        kind: "confirm",
-        title: asText(parameters.titlu) || "Confirmi?",
-        details: asText(parameters.detalii),
-        recipient: asText(parameters.destinatar) || undefined,
+    cere_confirmare: async (parameters: { titlu?: unknown; detalii?: unknown; destinatar?: unknown }) => {
+      const answer = await confirm(
+        asText(parameters.titlu) || "Confirmi?",
+        asText(parameters.detalii),
+        asText(parameters.destinatar) || undefined,
+      );
+      return answer === "da"
+        ? "Daniel a apăsat Da."
+        : answer === "nu"
+          ? "Daniel a apăsat Nu. Nu face acțiunea."
+          : "Daniel nu a răspuns. Nu face acțiunea.";
+    },
+    agenda_citeste: (parameters: { de_la?: unknown; pana_la?: unknown }) => {
+      const query = new URLSearchParams();
+      if (asText(parameters.de_la)) query.set("de_la", asText(parameters.de_la));
+      if (asText(parameters.pana_la)) query.set("pana_la", asText(parameters.pana_la));
+      return callApi(`/api/agenda?${query}`);
+    },
+    agenda_adauga: async (parameters: { titlu?: unknown; inceput?: unknown; sfarsit?: unknown; descriere?: unknown }) => {
+      const title = asText(parameters.titlu);
+      const start = asText(parameters.inceput);
+      const end = asText(parameters.sfarsit);
+      const when = [start, end].filter(Boolean).map((value) => value.replace("T", " ")).join(" – ");
+      const answer = await confirm("Adaug în agendă?", `${title}\n${when}`);
+      if (answer !== "da") return "Daniel nu a confirmat. Evenimentul NU a fost adăugat.";
+      return callApi("/api/agenda", "POST", {
+        titlu: title,
+        inceput: start,
+        sfarsit: end || undefined,
+        descriere: asText(parameters.descriere) || undefined,
       });
-      return new Promise<string>((resolve) => {
-        const timer = setTimeout(() => settle(id, "fără răspuns"), CONFIRM_TIMEOUT_MS);
-        answers.current.set(id, (answer) => {
-          clearTimeout(timer);
-          resolve(
-            answer === "da"
-              ? "Daniel a apăsat Da."
-              : answer === "nu"
-                ? "Daniel a apăsat Nu. Nu face acțiunea."
-                : "Daniel nu a răspuns. Nu face acțiunea.",
-          );
-        });
+    },
+    sarcini_citeste: () => callApi("/api/sarcini"),
+    sarcini_adauga: async (parameters: { titlu?: unknown; scadenta?: unknown; notite?: unknown }) => {
+      const title = asText(parameters.titlu);
+      const due = asText(parameters.scadenta);
+      const answer = await confirm("Adaug în to-do?", due ? `${title}\nScadență: ${due}` : title);
+      if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost adăugată.";
+      return callApi("/api/sarcini", "POST", {
+        titlu: title,
+        scadenta: due || undefined,
+        notite: asText(parameters.notite) || undefined,
       });
+    },
+    sarcini_bifeaza: async (parameters: { id?: unknown; titlu?: unknown }) => {
+      const answer = await confirm("Bifez ca făcută?", asText(parameters.titlu) || "Sarcina aleasă");
+      if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost bifată.";
+      return callApi("/api/sarcini", "PATCH", { id: asText(parameters.id) });
     },
     inchide_ferestrele: () => {
       setCards((previous) => previous.filter((card) => card.kind === "confirm"));
@@ -256,13 +325,17 @@ function Assistant() {
         </dl>
         <h2 className="panel-title">Module</h2>
         <ul className="modules">
-          {MODULES.map((module) => (
-            <li key={module.name} className={module.ready ? "ready" : ""}>
-              <span className="dot" />
-              {module.name}
-              <span className="module-state">{module.ready ? "online" : "în curând"}</span>
-            </li>
-          ))}
+          {MODULES.map((module) => {
+            const online = module.ready && (!module.google || googleConnected);
+            const state = online ? "online" : module.google && module.ready ? "neconectat" : "în curând";
+            return (
+              <li key={module.name} className={online ? "ready" : ""}>
+                <span className="dot" />
+                {module.name}
+                <span className="module-state">{state}</span>
+              </li>
+            );
+          })}
         </ul>
       </aside>
 
@@ -271,6 +344,12 @@ function Assistant() {
         <p className="status">{label}</p>
         {connected && <p className="hint">Atinge din nou ca să închizi.</p>}
         {error && <p className="error">{error}</p>}
+        {googleNotice && <p className="hint">{googleNotice}</p>}
+        {!googleConnected && (
+          <a className="connect" href="/api/google/connect">
+            Conectează Google (agendă și to-do)
+          </a>
+        )}
       </section>
 
       <aside className="panel panel-right">
