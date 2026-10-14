@@ -6,6 +6,7 @@ export const TIME_ZONE = "Europe/Bucharest";
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/tasks",
+  "https://www.googleapis.com/auth/spreadsheets",
 ];
 
 function secretKey(): Buffer {
@@ -100,6 +101,9 @@ export async function google<T>(url: string, init: RequestInit = {}): Promise<T>
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json", ...init.headers },
     cache: "no-store",
   });
+  if (response.status === 403) {
+    throw new GoogleError("Argus nu are încă voie aici. Daniel trebuie să apese „Reconectează Google” în aplicație.");
+  }
   if (!response.ok) {
     throw new GoogleError(`Google a răspuns cu ${response.status}.`);
   }

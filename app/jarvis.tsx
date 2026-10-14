@@ -12,7 +12,7 @@ const MODULES: { name: string; ready: boolean; google?: boolean }[] = [
   { name: "Ferestre", ready: true },
   { name: "Agendă", ready: true, google: true },
   { name: "Listă to-do", ready: true, google: true },
-  { name: "Buget", ready: false },
+  { name: "Buget", ready: true, google: true },
   { name: "Muzică", ready: false },
 ];
 
@@ -205,6 +205,17 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost bifată.";
       return callApi("/api/sarcini", "PATCH", { id: asText(parameters.id) });
     },
+    buget_categorii: () => callApi("/api/buget"),
+    buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
+      const amount = String(parameters.suma ?? "").trim();
+      const category = asText(parameters.categorie);
+      const note = asText(parameters.nota);
+      const date = asText(parameters.data);
+      const details = [`${amount} lei · ${category}`, note, date ? `Data: ${date}` : "Data: azi"].filter(Boolean).join("\n");
+      const answer = await confirm("Trec în buget?", details);
+      if (answer !== "da") return "Daniel nu a confirmat. Cheltuiala NU a fost trecută.";
+      return callApi("/api/buget", "POST", { suma: amount, categorie: category, nota: note, data: date || undefined });
+    },
     inchide_ferestrele: () => {
       setCards((previous) => previous.filter((card) => card.kind === "confirm"));
       return "Ferestrele sunt închise.";
@@ -366,11 +377,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         {connected && <p className="hint">Atinge din nou ca să închizi.</p>}
         {error && <p className="error">{error}</p>}
         {googleNotice && <p className="hint">{googleNotice}</p>}
-        {!googleConnected && (
-          <a className="connect" href="/api/google/connect">
-            Conectează Google (agendă și to-do)
-          </a>
-        )}
+        <a className={googleConnected ? "connect connect-quiet" : "connect"} href="/api/google/connect">
+          {googleConnected ? "Reconectează Google" : "Conectează Google (agendă, to-do, buget)"}
+        </a>
       </section>
 
       <aside className="panel panel-right">
