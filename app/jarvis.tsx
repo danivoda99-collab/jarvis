@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import Hud, { type HudState } from "./hud";
+import CardStack, { type Answer, type Card } from "./cards";
 
 type Line = { role: "user" | "agent"; text: string; at: string };
 
@@ -36,8 +37,25 @@ function timeOf(date: Date) {
   return date.toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
 }
 
+function asText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function asList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(asText).filter(Boolean);
+  // Uneori modelul trimite lista ca text, câte un element pe rând.
+  return asText(value)
+    .split("\n")
+    .map((item) => item.replace(/^[-•*\d.)\s]+/, "").trim())
+    .filter(Boolean);
+}
+
+const CONFIRM_TIMEOUT_MS = 90_000;
+
 function Assistant() {
   const [lines, setLines] = useState<Line[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const answers = useRef(new Map<string, (answer: Answer | "fără răspuns") => void>());
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
   const hudRef = useRef<HTMLButtonElement>(null);
@@ -45,12 +63,81 @@ function Assistant() {
   const logRef = useRef<HTMLDivElement>(null);
   const now = useClock();
 
+  function addCard(card: Card) {
+    setCards((previous) => [...previous.filter((item) => item.kind === "confirm"), card].slice(-4));
+  }
+
+  function closeCard(id: string) {
+    setCards((previous) => previous.filter((card) => card.id !== id));
+  }
+
+  function settle(id: string, answer: Answer | "fără răspuns") {
+    answers.current.get(id)?.(answer);
+    answers.current.delete(id);
+    closeCard(id);
+  }
+
+  // Unelte pe care agentul ARGUS le cheamă ca să arate ferestre pe ecran.
+  const clientTools = {
+    arata_rezumat: (parameters: { titlu?: unknown; text?: unknown; puncte?: unknown }) => {
+      addCard({
+        id: crypto.randomUUID(),
+        kind: "summary",
+        title: asText(parameters.titlu) || "Rezumat",
+        text: asText(parameters.text),
+        points: asList(parameters.puncte),
+      });
+      return "Rezumatul e afișat pe ecran.";
+    },
+    arata_lista: (parameters: { titlu?: unknown; elemente?: unknown }) => {
+      addCard({
+        id: crypto.randomUUID(),
+        kind: "list",
+        title: asText(parameters.titlu) || "Listă",
+        items: asList(parameters.elemente),
+      });
+      return "Lista e afișată pe ecran.";
+    },
+    cere_confirmare: (parameters: { titlu?: unknown; detalii?: unknown; destinatar?: unknown }) => {
+      const id = crypto.randomUUID();
+      addCard({
+        id,
+        kind: "confirm",
+        title: asText(parameters.titlu) || "Confirmi?",
+        details: asText(parameters.detalii),
+        recipient: asText(parameters.destinatar) || undefined,
+      });
+      return new Promise<string>((resolve) => {
+        const timer = setTimeout(() => settle(id, "fără răspuns"), CONFIRM_TIMEOUT_MS);
+        answers.current.set(id, (answer) => {
+          clearTimeout(timer);
+          resolve(
+            answer === "da"
+              ? "Daniel a apăsat Da."
+              : answer === "nu"
+                ? "Daniel a apăsat Nu. Nu face acțiunea."
+                : "Daniel nu a răspuns. Nu face acțiunea.",
+          );
+        });
+      });
+    },
+    inchide_ferestrele: () => {
+      setCards((previous) => previous.filter((card) => card.kind === "confirm"));
+      return "Ferestrele sunt închise.";
+    },
+  };
+
   const conversation = useConversation({
+    clientTools,
     onMessage: ({ message, source }) => {
       const line: Line = { role: source === "user" ? "user" : "agent", text: message, at: timeOf(new Date()) };
       setLines((previous) => [...previous, line].slice(-30));
     },
     onError: (message) => setError(message || "Ceva n-a mers. Mai încearcă."),
+    // O confirmare rămasă deschisă când se închide conversația nu mai poate aproba nimic.
+    onDisconnect: () => {
+      for (const id of [...answers.current.keys()]) settle(id, "fără răspuns");
+    },
   });
 
   const { status, isSpeaking } = conversation;
@@ -200,6 +287,8 @@ function Assistant() {
           ))}
         </div>
       </aside>
+
+      <CardStack cards={cards} onClose={closeCard} onAnswer={settle} />
     </main>
   );
 }
