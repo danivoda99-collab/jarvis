@@ -1,0 +1,194 @@
+/* Paleta Voda: negru, portocaliu-flacără, auriu, ivoriu. */
+:root {
+  --black: #0b0b0c;
+  --black-soft: #17171a;
+  --flame: #ff6a13;
+  --flame-deep: #d9430b;
+  --gold: #d4a64a;
+  --ivory: #f4ecd8;
+  --ivory-muted: #b9b0a0;
+  --danger: #ff8a7a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--black);
+  color: var(--ivory);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(env(safe-area-inset-top) + 24px) 16px calc(env(safe-area-inset-bottom) + 24px);
+  gap: 20px;
+  background: radial-gradient(120% 70% at 50% 45%, #1d1410 0%, var(--black) 70%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.32em;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gold);
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0;
+  border: 1.5px solid var(--gold);
+  font-size: 16px;
+}
+
+/* Orbul: butonul principal. --level (0..1) vine din volumul vocii. */
+.orb {
+  --level: 0;
+  margin-top: 10vh;
+  width: min(64vw, 280px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, var(--flame) 0%, var(--flame-deep) 55%, #3a1606 100%);
+  box-shadow:
+    0 0 calc(30px + var(--level) * 70px) rgba(255, 106, 19, calc(0.25 + var(--level) * 0.5)),
+    inset 0 0 0 2px rgba(212, 166, 74, 0.6);
+  transform: scale(calc(1 + var(--level) * 0.08));
+  transition: transform 80ms linear, box-shadow 80ms linear, filter 300ms ease;
+  display: grid;
+  place-items: center;
+}
+
+.orb-core {
+  width: 38%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ivory) 0%, rgba(244, 236, 216, 0.15) 70%);
+  opacity: 0.85;
+}
+
+.orb-idle {
+  filter: saturate(0.75) brightness(0.85);
+  animation: breathe 3.2s ease-in-out infinite;
+}
+
+.orb-listening {
+  box-shadow:
+    0 0 calc(30px + var(--level) * 70px) rgba(244, 236, 216, calc(0.2 + var(--level) * 0.5)),
+    inset 0 0 0 3px var(--ivory);
+}
+
+.orb-busy {
+  animation: breathe 0.9s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.status {
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.hint {
+  font-size: 14px;
+  color: var(--ivory-muted);
+}
+
+.error {
+  color: var(--danger);
+  font-size: 15px;
+  text-align: center;
+  max-width: 340px;
+}
+
+.transcript {
+  width: 100%;
+  max-width: 480px;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line {
+  font-size: 15px;
+  line-height: 1.4;
+  padding: 10px 14px;
+  border-radius: 14px;
+  max-width: 85%;
+}
+
+.line-user {
+  align-self: flex-end;
+  background: var(--black-soft);
+  color: var(--ivory-muted);
+}
+
+.line-agent {
+  align-self: flex-start;
+  background: rgba(212, 166, 74, 0.12);
+  border: 1px solid rgba(212, 166, 74, 0.35);
+}
+
+.login {
+  margin-top: 18vh;
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login label {
+  color: var(--ivory-muted);
+  font-size: 15px;
+}
+
+.login input {
+  font-size: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(212, 166, 74, 0.5);
+  background: var(--black-soft);
+  color: var(--ivory);
+}
+
+.login button {
+  font-size: 17px;
+  font-weight: 600;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  background: var(--flame);
+  color: var(--black);
+}
+
+.login button:disabled {
+  opacity: 0.5;
+}
