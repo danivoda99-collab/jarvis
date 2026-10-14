@@ -51,6 +51,21 @@ function asList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+// Doar un „da” sau „nu” clar contează; orice altceva lasă fereastra deschisă.
+function spokenAnswer(message: string): Answer | null {
+  const words = message
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0 || words.length > 4) return null;
+  if (words.includes("nu") || words.includes("anuleaza")) return "nu";
+  if (words[0] === "da" || (words[0] === "confirm" && words.length === 1)) return "da";
+  return null;
+}
+
 const CONFIRM_TIMEOUT_MS = 90_000;
 
 function Assistant({ googleConnected }: { googleConnected: boolean }) {
@@ -199,6 +214,12 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const conversation = useConversation({
     clientTools,
     onMessage: ({ message, source }) => {
+      // Un „da” sau „nu” spus cu vocea răspunde la ultima fereastră de confirmare deschisă.
+      if (source === "user" && answers.current.size > 0) {
+        const spoken = spokenAnswer(message);
+        const pending = [...answers.current.keys()].pop();
+        if (spoken && pending) settle(pending, spoken);
+      }
       const line: Line = { role: source === "user" ? "user" : "agent", text: message, at: timeOf(new Date()) };
       setLines((previous) => [...previous, line].slice(-30));
     },
