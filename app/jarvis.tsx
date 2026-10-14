@@ -234,7 +234,12 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const line: Line = { role: source === "user" ? "user" : "agent", text: message, at: timeOf(new Date()) };
       setLines((previous) => [...previous, line].slice(-30));
     },
-    onError: (message) => setError(message || "Ceva n-a mers. Mai încearcă."),
+    onError: (message) =>
+      setError(
+        /quota|credits/i.test(message ?? "")
+          ? "S-au terminat minutele ElevenLabs. Treci pe un plan plătit sau așteaptă luna viitoare."
+          : message || "Ceva n-a mers. Mai încearcă.",
+      ),
     // O confirmare rămasă deschisă când se închide conversația nu mai poate aproba nimic.
     onDisconnect: () => {
       for (const id of [...answers.current.keys()]) settle(id, "fără răspuns");
