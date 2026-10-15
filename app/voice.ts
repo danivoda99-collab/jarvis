@@ -1,5 +1,5 @@
-// Urechea și vocea lui ARGUS, direct din browser: recunoaștere vocală în română și voce în engleză.
-// Nu costă nimic și nu are limită de minute.
+// Urechea și vocea lui ARGUS. Cu cheie OpenAI în Vercel: auz prin transcriere și voce naturală de la OpenAI.
+// Fără ea: recunoașterea și vocile din browser, gratuite dar mai robotice.
 
 type Recognition = {
   lang: string;
@@ -21,14 +21,18 @@ function recognitionCtor(): RecognitionCtor | null {
   return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
 }
 
-export function canListen() {
+function browserCanListen() {
   return recognitionCtor() !== null;
 }
 
 export type Heard = { text: string; final: boolean };
 
-// Ascultă o singură frază în română. Se oprește singur la tăcere.
-export function listenOnce(onHeard: (heard: Heard) => void, onEnd: (error?: string) => void): () => void {
+// Pauza după care Argus consideră că Daniel a terminat de vorbit.
+const PAUSE_MS = 1800;
+const MAX_LISTEN_MS = 45_000;
+
+// Ascultă o replică în română. Pauzele scurte nu o taie: se oprește după PAUSE_MS de liniște.
+function browserListen(onHeard: (heard: Heard) => void, onEnd: (error?: string) => void): () => void {
   const Ctor = recognitionCtor();
   if (!Ctor) {
     onEnd("unsupported");
@@ -36,23 +40,49 @@ export function listenOnce(onHeard: (heard: Heard) => void, onEnd: (error?: stri
   }
   const recognition = new Ctor();
   recognition.lang = "ro-RO";
-  recognition.continuous = false;
+  recognition.continuous = true;
   recognition.interimResults = true;
   let error: string | undefined;
+  let pause: ReturnType<typeof setTimeout> | undefined;
+  const cap = setTimeout(() => recognition.stop(), MAX_LISTEN_MS);
   recognition.onresult = (event) => {
-    const result = event.results[event.results.length - 1];
-    if (result?.[0]) onHeard({ text: result[0].transcript.trim(), final: result.isFinal });
+    let finals = "";
+    let interim = "";
+    for (let index = 0; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      const text = result?.[0]?.transcript ?? "";
+      if (result?.isFinal) finals += `${text} `;
+      else interim += `${text} `;
+    }
+    const text = `${finals}${interim}`.replace(/\s+/g, " ").trim();
+    if (!text) return;
+    // Textul rămâne „final” doar când nu mai e nimic provizoriu; la liniște, provizoriul devine final.
+    onHeard({ text, final: !interim.trim() });
+    if (pause) clearTimeout(pause);
+    pause = setTimeout(() => {
+      onHeard({ text, final: true });
+      recognition.stop();
+    }, PAUSE_MS);
   };
   recognition.onerror = (event) => {
     error = event.error;
   };
-  recognition.onend = () => onEnd(error);
+  recognition.onend = () => {
+    clearTimeout(cap);
+    if (pause) clearTimeout(pause);
+    onEnd(error);
+  };
   try {
     recognition.start();
   } catch {
+    clearTimeout(cap);
     onEnd("start");
   }
-  return () => recognition.abort();
+  return () => {
+    clearTimeout(cap);
+    if (pause) clearTimeout(pause);
+    recognition.abort();
+  };
 }
 
 // Vocile englezești, de la cea mai potrivită: Brian (Edge pe Windows), Evan sau Nathan (iPhone), apoi orice voce naturală.
@@ -93,33 +123,284 @@ export function chooseVoice(name: string) {
   }
 }
 
-function currentVoice(): SpeechSynthesisVoice | null {
+function browserVoice(): SpeechSynthesisVoice | null {
   const voices = englishVoices();
   const saved = chosenVoiceName();
   return voices.find((voice) => voice.name === saved) ?? voices[0] ?? null;
 }
 
-// Pe iPhone vocea pornește doar după o atingere: o frază goală la prima atingere o deblochează.
+// --- Alegerea motorului ---------------------------------------------------------
+
+let cloud = false;
+let cloudDefault = "ash";
+
+export function setCloudVoice(enabled: boolean, defaultVoice: string) {
+  cloud = enabled;
+  cloudDefault = defaultVoice;
+}
+
+export function canListen() {
+  if (!cloud) return browserCanListen();
+  return typeof window !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia) && typeof MediaRecorder !== "undefined";
+}
+
+// --- Sunetul (Web Audio merge sigur pe iPhone după o atingere) ------------------
+
+let context: AudioContext | null = null;
+
+function audio(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  if (!context) {
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    context = new Ctor();
+  }
+  return context;
+}
+
+// Pe iPhone vocea pornește doar după o atingere: o deblocăm la prima atingere.
 export function primeSpeech() {
+  const ctx = audio();
+  if (ctx && ctx.state !== "running") void ctx.resume();
   const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
-  if (!synth) return;
+  if (!synth || cloud) return;
   synth.cancel();
   synth.speak(new SpeechSynthesisUtterance(""));
 }
 
 let finishCurrent: (() => void) | null = null;
+let speakGeneration = 0;
+let source: AudioBufferSourceNode | null = null;
 
 export function stopSpeaking() {
+  speakGeneration += 1;
+  try {
+    source?.stop();
+  } catch {
+    // sunetul se terminase deja
+  }
+  source = null;
   window.speechSynthesis?.cancel();
   // Unele browsere nu anunță sfârșitul frazelor anulate; închidem noi promisiunea.
   finishCurrent?.();
 }
 
-// Citește textul propoziție cu propoziție (Chrome taie frazele lungi de peste 15 secunde).
 export function speak(text: string): Promise<void> {
+  if (!text.trim()) return Promise.resolve();
+  return cloud ? cloudSpeak(text) : browserSpeak(text);
+}
+
+// Bucăți de una-două propoziții: prima ajunge repede, restul se pregătesc cât vorbește.
+function chunks(text: string): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]*/g)?.map((part) => part.trim()).filter(Boolean) ?? [text];
+  const result: string[] = [];
+  for (const sentence of sentences) {
+    // Prima propoziție pleacă singură; următoarele se adună până la ~180 de caractere.
+    const last = result[result.length - 1];
+    if (result.length >= 2 && last.length + sentence.length < 180) result[result.length - 1] = `${last} ${sentence}`;
+    else result.push(sentence);
+  }
+  return result;
+}
+
+async function fetchSpeech(text: string): Promise<ArrayBuffer> {
+  const response = await fetch("/api/vorbeste", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voce: chosenVoiceName() || cloudDefault }),
+  });
+  if (!response.ok) throw new Error(String(response.status));
+  return response.arrayBuffer();
+}
+
+function play(ctx: AudioContext, buffer: AudioBuffer, generation: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (generation !== speakGeneration) return resolve();
+    const node = ctx.createBufferSource();
+    node.buffer = buffer;
+    node.connect(ctx.destination);
+    source = node;
+    const done = () => {
+      if (finishCurrent === done) finishCurrent = null;
+      resolve();
+    };
+    finishCurrent = done;
+    node.onended = done;
+    node.start();
+  });
+}
+
+async function cloudSpeak(text: string): Promise<void> {
+  stopSpeaking();
+  const generation = speakGeneration;
+  const ctx = audio();
+  if (!ctx) return browserSpeak(text);
+  if (ctx.state !== "running") await ctx.resume().catch(() => {});
+  const parts = chunks(text);
+  const pending = parts.map((part) => fetchSpeech(part));
+  pending.forEach((promise) => promise.catch(() => {}));
+  for (let index = 0; index < parts.length; index += 1) {
+    if (generation !== speakGeneration) return;
+    let buffer: AudioBuffer;
+    try {
+      buffer = await ctx.decodeAudioData(await pending[index]);
+    } catch {
+      // OpenAI nu răspunde: restul îl citește vocea din browser, ca să nu rămână mut.
+      if (generation !== speakGeneration) return;
+      return browserSpeak(parts.slice(index).join(" "));
+    }
+    await play(ctx, buffer, generation);
+  }
+}
+
+// --- Auzul prin OpenAI ------------------------------------------------------------
+
+let micStream: MediaStream | null = null;
+
+// Pornește microfonul o dată pe conversație, ca iPhone-ul să nu întrebe la fiecare frază.
+export async function openMic(): Promise<string | undefined> {
+  if (!cloud) return undefined;
+  if (micStream?.active) return undefined;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    return undefined;
+  } catch (caught) {
+    return caught instanceof DOMException && caught.name === "NotAllowedError" ? "not-allowed" : "start";
+  }
+}
+
+export function closeMic() {
+  micStream?.getTracks().forEach((track) => track.stop());
+  micStream = null;
+}
+
+function recorderType(): string {
+  for (const type of ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"]) {
+    if (MediaRecorder.isTypeSupported?.(type)) return type;
+  }
+  return "";
+}
+
+const SILENCE_MS = 1500; // după atâta liniște, Daniel a terminat
+const NO_SPEECH_MS = 8000; // dacă nu spune nimic, runda e „tăcută”
+
+function cloudListen(
+  onHeard: (heard: Heard) => void,
+  onEnd: (error?: string, message?: string) => void,
+  onLevel?: (level: number) => void,
+): () => void {
+  const ctx = audio();
+  const stream = micStream;
+  if (!ctx || !stream?.active) {
+    onEnd("start");
+    return () => {};
+  }
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  const input = ctx.createMediaStreamSource(stream);
+  input.connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  const type = recorderType();
+  const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  const pieces: Blob[] = [];
+  recorder.ondataavailable = (event) => {
+    if (event.data.size > 0) pieces.push(event.data);
+  };
+
+  const startedAt = performance.now();
+  let floor = 0;
+  let floorSamples = 0;
+  let loud = 0;
+  let spoke = false;
+  let lastVoice = startedAt;
+  let aborted = false;
+
+  const timer = setInterval(() => {
+    analyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const value of samples) sum += value * value;
+    const rms = Math.sqrt(sum / samples.length);
+    const now = performance.now();
+    if (now - startedAt < 300) {
+      floor = (floor * floorSamples + rms) / (floorSamples + 1);
+      floorSamples += 1;
+      return;
+    }
+    const threshold = Math.max(0.012, floor * 2.5);
+    onLevel?.(Math.min(1, rms * 12));
+    if (rms > threshold) {
+      loud += 1;
+      if (loud >= 2) {
+        spoke = true;
+        lastVoice = now;
+      }
+    } else loud = 0;
+    if ((spoke && now - lastVoice > SILENCE_MS) || (!spoke && now - startedAt > NO_SPEECH_MS) || now - startedAt > MAX_LISTEN_MS) {
+      finishRecording();
+    }
+  }, 50);
+
+  function cleanup() {
+    clearInterval(timer);
+    input.disconnect();
+  }
+
+  function finishRecording() {
+    cleanup();
+    if (recorder.state !== "inactive") recorder.stop();
+  }
+
+  recorder.onstop = async () => {
+    if (aborted) return;
+    if (!spoke || pieces.length === 0) return onEnd();
+    onHeard({ text: "…", final: false });
+    const blob = new Blob(pieces, { type: recorder.mimeType || type || "audio/webm" });
+    const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+    const form = new FormData();
+    form.set("audio", blob, `voce.${extension}`);
+    try {
+      const response = await fetch("/api/asculta", { method: "POST", body: form });
+      const data = (await response.json()) as { text?: string; error?: string };
+      if (aborted) return;
+      if (!response.ok) return onEnd("server", data.error);
+      if (data.text) onHeard({ text: data.text, final: true });
+      onEnd();
+    } catch {
+      if (!aborted) onEnd("server", "Nu am putut trimite ce ai spus. Verifică internetul.");
+    }
+  };
+
+  try {
+    recorder.start(250);
+  } catch {
+    cleanup();
+    onEnd("start");
+  }
+  return () => {
+    aborted = true;
+    cleanup();
+    if (recorder.state !== "inactive") recorder.stop();
+  };
+}
+
+// Ascultă o replică a lui Daniel, cu motorul ales.
+export function listenOnce(
+  onHeard: (heard: Heard) => void,
+  onEnd: (error?: string, message?: string) => void,
+  onLevel?: (level: number) => void,
+): () => void {
+  return cloud ? cloudListen(onHeard, onEnd, onLevel) : browserListen(onHeard, onEnd);
+}
+
+// --- Vocea din browser (rezervă) -------------------------------------------------
+
+// Citește textul propoziție cu propoziție (Chrome taie frazele lungi de peste 15 secunde).
+function browserSpeak(text: string): Promise<void> {
   const synth = window.speechSynthesis;
   if (!synth || !text.trim()) return Promise.resolve();
-  const voice = currentVoice();
+  const voice = browserVoice();
   const parts = text.match(/[^.!?]+[.!?]*/g)?.map((part) => part.trim()).filter(Boolean) ?? [text];
   synth.cancel();
   finishCurrent?.();

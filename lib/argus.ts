@@ -33,7 +33,9 @@ La arata_rezumat și arata_lista pui modulul (agenda, sarcini, buget, gmail) câ
 Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, refuz”; aplicația îți transmite rezultatul. Nu trata aceste fraze ca pe o comandă nouă.
 
 # Agenda, to-do și remindere
-- Ai acces la Google Calendar (agenda_citeste, agenda_adauga) și la Google Tasks (sarcini_citeste, sarcini_adauga, sarcini_bifeaza).
+- Ai acces la Google Calendar (agenda_citeste, agenda_adauga, agenda_modifica, agenda_sterge) și la Google Tasks (sarcini_citeste, sarcini_adauga, sarcini_modifica, sarcini_bifeaza).
+- Ca să modifici sau să ștergi, citești întâi agenda ori sarcinile ca să afli id-ul. Dacă se potrivesc mai multe, întrebi care.
+- Ștergerea din agendă e sigură: Google păstrează evenimentul 30 de zile în Coș. Sarcinile nu le ștergi niciodată: când Daniel cere să ștergi o sarcină, o bifezi cu sarcini_bifeaza și îi spui că a bifat-o, ca să rămână în istoric.
 - Pentru „ce am azi/mâine/săptămâna asta”, citești agenda și sarcinile, spui pe scurt și afișezi detaliile cu arata_rezumat.
 - Reminderele: dacă Daniel dă o oră („amintește-mi joi la 15 să…”), le pui în agendă cu agenda_adauga, cu durata de 15 minute, ca să primească notificare. Dacă dă doar o zi sau niciuna, le pui în to-do cu sarcini_adauga și scadența respectivă.
 - Datele le calculezi din data și ora de acum, pe care aplicația le pune la începutul fiecărui mesaj al lui Daniel, ora României. Dacă la o întâlnire lipsește ora, întrebi.
@@ -44,7 +46,7 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Dacă unealta spune că lista s-a schimbat, citești categoriile cu buget_categorii.
 
 # Confirmări
-agenda_adauga, sarcini_adauga, sarcini_bifeaza și buget_adauga arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Spui doar, în engleză, că îi arăți pe ecran și că poate spune „Argus, accept” sau „Argus, refuz”, și chemi unealta. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
+agenda_adauga, agenda_modifica, agenda_sterge, sarcini_adauga, sarcini_modifica, sarcini_bifeaza și buget_adauga arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Spui doar, în engleză, că îi arăți pe ecran și că poate spune „Argus, accept” sau „Argus, refuz”, și chemi unealta. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
 
 # Ce nu ai încă
 Accesul la mailuri, muzică, laptop, rapoartele echipei și apeluri vine în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
@@ -54,7 +56,7 @@ Accesul la mailuri, muzică, laptop, rapoartele echipei și apeluri vine în ver
 2. Nu faci plăți, transferuri sau tranzacții financiare.
 3. Nu ceri și nu reții parole, coduri sau numere de card.
 4. Nu discuți și nu reții date personale ale clienților OVB. Lucrezi doar cu cifre agregate și date despre echipă. Nu pui nume sau date de clienți în agendă, în to-do sau în buget; folosești formulări neutre, de exemplu „Întâlnire client”.
-5. Nu ștergi nimic definitiv.
+5. Nu ștergi nimic definitiv (evenimentele șterse din agendă rămân 30 de zile în Coș, deci sunt permise cu confirmare).
 6. Când scrii texte pentru Daniel, semnalezi scurt greșelile de gramatică sau formulările stângace în română.`;
 
 const MODUL = {
@@ -114,7 +116,7 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "agenda_citeste",
     description:
-      "Citește evenimentele din Google Calendar ale lui Daniel între două zile (inclusiv). Folosește pentru întrebări despre program, întâlniri, ziua de azi sau de mâine.",
+      "Citește evenimentele din Google Calendar ale lui Daniel între două zile (inclusiv). Fiecare are un id, folosit la modificare sau ștergere. Folosește pentru întrebări despre program, întâlniri, ziua de azi sau de mâine.",
     input_schema: {
       type: "object",
       properties: {
@@ -140,8 +142,39 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: "agenda_modifica",
+    description:
+      "Modifică un eveniment din Google Calendar: titlul, ora sau descrierea. Ia id-ul din agenda_citeste. Dacă muți doar începutul, durata rămâne aceeași. Aplicația arată singură fereastra Da/Nu.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "id-ul evenimentului din agenda_citeste" },
+        titlu_actual: { type: "string", description: "Titlul de acum și ziua, ca să apară în fereastră" },
+        titlu: { type: "string", description: "Titlul nou, doar dacă se schimbă" },
+        inceput: { type: "string", description: "Noul început, ora României, AAAA-LL-ZZTHH:MM, doar dacă se schimbă" },
+        sfarsit: { type: "string", description: "Noul sfârșit, AAAA-LL-ZZTHH:MM, doar dacă se schimbă" },
+        descriere: { type: "string", description: "Descrierea nouă, doar dacă se schimbă" },
+      },
+      required: ["id", "titlu_actual"],
+    },
+  },
+  {
+    name: "agenda_sterge",
+    description:
+      "Șterge un eveniment din Google Calendar (rămâne 30 de zile în Coș). Ia id-ul din agenda_citeste. Aplicația arată singură fereastra Da/Nu.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "id-ul evenimentului din agenda_citeste" },
+        titlu: { type: "string", description: "Titlul evenimentului, ca să apară în fereastră" },
+        cand: { type: "string", description: "Ziua și ora evenimentului, ca să apară în fereastră" },
+      },
+      required: ["id", "titlu"],
+    },
+  },
+  {
     name: "sarcini_citeste",
-    description: "Citește sarcinile nebifate din lista de to-do a lui Daniel (Google Tasks). Fiecare are un id, folosit la bifare.",
+    description: "Citește sarcinile nebifate din lista de to-do a lui Daniel (Google Tasks). Fiecare are un id, folosit la bifare sau modificare.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -168,6 +201,22 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
         titlu: { type: "string", description: "Titlul sarcinii, ca să apară în fereastră" },
       },
       required: ["id", "titlu"],
+    },
+  },
+  {
+    name: "sarcini_modifica",
+    description:
+      "Schimbă titlul, scadența sau notițele unei sarcini din to-do. Ia id-ul din sarcini_citeste. Aplicația arată singură fereastra Da/Nu.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "id-ul sarcinii din sarcini_citeste" },
+        titlu_actual: { type: "string", description: "Titlul de acum, ca să apară în fereastră" },
+        titlu: { type: "string", description: "Titlul nou, doar dacă se schimbă" },
+        scadenta: { type: "string", description: "Scadența nouă, AAAA-LL-ZZ, doar dacă se schimbă" },
+        notite: { type: "string", description: "Notițele noi, doar dacă se schimbă" },
+      },
+      required: ["id", "titlu_actual"],
     },
   },
   {
