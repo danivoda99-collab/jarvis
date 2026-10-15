@@ -357,8 +357,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const title = asText(parameters.titlu);
       const request = asText(parameters.cerere);
       if (!request) return "Lipsește cererea.";
-      const answer = await confirm("Trimit lui Claude pe laptop?", title ? `${title}\n\n${request}` : request);
-      if (answer !== "da") return "Daniel nu a confirmat. Cererea NU a fost trimisă.";
+      // Trimiterea către laptop nu mai cere „Da”: Claude cere o singură confirmare, la final, înainte să trimită ceva în afară.
       return callApi("/api/cereri", "POST", { titlu: title, cerere: request });
     },
     claude_cereri: async () => {
