@@ -16,10 +16,26 @@ async function categories(): Promise<string[]> {
   return (data.values ?? []).map((row) => row[0]?.trim()).filter(Boolean);
 }
 
-// Categoriile permise, din tabul Categorii.
-export async function GET() {
+// Situația lunii din tabul „Buget vs. cheltuit” (luna e în B1, implicit cea curentă).
+async function situation() {
+  const data = await google<{ values?: string[][] }>(
+    `${SHEET}/values/${encodeURIComponent("'Buget vs. cheltuit'!A1:E40")}`,
+  );
+  const rows = data.values ?? [];
+  const month = rows[0]?.[1] ?? "";
+  const header = ["Categorie", "Buget", "Cheltuit", "Rămas", "%"];
+  const body = rows
+    .slice(3)
+    .filter((row) => row[0] && (row[0] === "Total" || row[1] !== "0" || row[2] !== "0"))
+    .map((row) => [row[0], row[1] ?? "", row[2] ?? "", row[3] ?? "", row[4] ?? ""]);
+  return { luna: month, tabel: [header, ...body] };
+}
+
+// Categoriile permise, din tabul Categorii; cu ?situatie=1, situația lunii.
+export async function GET(request: Request) {
   if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
   try {
+    if (new URL(request.url).searchParams.has("situatie")) return NextResponse.json(await situation());
     return NextResponse.json({ categorii: await categories() });
   } catch (caught) {
     return failure(caught);

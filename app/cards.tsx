@@ -5,7 +5,7 @@ import type { Module } from "./orb";
 
 // `module` leagă fereastra de cuvântul ei de pe sferă (AGENDA, SARCINI, BUGET, GMAIL).
 export type Card = { module?: Module } & (
-  | { id: string; kind: "summary"; title: string; text?: string; points?: string[] }
+  | { id: string; kind: "summary"; title: string; text?: string; points?: string[]; table?: string[][] }
   | { id: string; kind: "list"; title: string; items: string[] }
   | { id: string; kind: "confirm"; title: string; details: string; recipient?: string; table?: string[][] }
 );
@@ -44,6 +44,32 @@ function Typed({ text }: { text: string }) {
   );
 }
 
+function Table({ rows }: { rows: string[][] }) {
+  if (rows.length < 2) return null;
+  return (
+    <div className="card-table">
+      <table>
+        <thead>
+          <tr>
+            {rows[0].map((cell, index) => (
+              <th key={index}>{cell}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(1).map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {row.map((cell, index) => (
+                <td key={index}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function CardStack({
   cards,
   onClose,
@@ -77,6 +103,7 @@ export default function CardStack({
           {card.kind === "summary" && (
             <>
               {card.text && <p className="card-text">{card.text}</p>}
+              {card.table && <Table rows={card.table} />}
               {card.points && card.points.length > 0 && (
                 <ul className="card-points">
                   {card.points.map((point, index) => (
@@ -107,28 +134,7 @@ export default function CardStack({
                 </p>
               )}
               {card.details && <p className="card-details">{card.details}</p>}
-              {card.table && card.table.length > 1 && (
-                <div className="card-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        {card.table[0].map((cell, index) => (
-                          <th key={index}>{cell}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {card.table.slice(1).map((row, rowIndex) => (
-                        <tr key={rowIndex}>
-                          {row.map((cell, index) => (
-                            <td key={index}>{cell}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {card.table && <Table rows={card.table} />}
               <p className="card-hint">Spune „Argus, accept” sau „Argus, refuz”.</p>
               <div className="card-actions">
                 <button className="card-no" onClick={() => onAnswer(card.id, "nu")}>

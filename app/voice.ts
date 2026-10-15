@@ -307,6 +307,11 @@ function recorderType(): string {
 }
 
 const SILENCE_MS = 1500; // după atâta liniște, Daniel a terminat
+let userTalking = false; // Daniel vorbește chiar acum; Argus nu-l întrerupe cu anunțuri
+
+export function isUserTalking() {
+  return userTalking;
+}
 const NO_SPEECH_MS = 8000; // dacă nu spune nimic, runda e „tăcută”
 
 function cloudListen(
@@ -346,6 +351,13 @@ function cloudListen(
     for (const value of samples) sum += value * value;
     const rms = Math.sqrt(sum / samples.length);
     const now = performance.now();
+    // O notificare pe iPhone oprește sunetul câteva clipe: nu o luăm drept liniște și nu tăiem ce spune Daniel.
+    const track = stream.getAudioTracks()[0];
+    if (ctx.state !== "running" || track?.muted || track?.readyState === "ended") {
+      if (ctx.state !== "running") void ctx.resume().catch(() => {});
+      lastVoice = now;
+      return;
+    }
     if (now - startedAt < 300) {
       floor = (floor * floorSamples + rms) / (floorSamples + 1);
       floorSamples += 1;
@@ -357,6 +369,7 @@ function cloudListen(
       loud += 1;
       if (loud >= 2) {
         spoke = true;
+        userTalking = true;
         lastVoice = now;
       }
     } else loud = 0;
@@ -366,6 +379,7 @@ function cloudListen(
   }, 50);
 
   function cleanup() {
+    userTalking = false;
     clearInterval(timer);
     input.disconnect();
   }
