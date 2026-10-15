@@ -281,6 +281,8 @@ async function main() {
         process.exit(1);
       }
       log("Nu pot verifica cererile:", error.message);
+      lastSignal = null; // la următoarea verificare citim din nou toată lista, ca nimic să nu rămână neluat
+
     }
     await new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
   }
