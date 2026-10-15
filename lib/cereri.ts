@@ -17,6 +17,8 @@ export type Cerere = {
 };
 
 const LIST = "argus:cereri";
+// Crește la fiecare schimbare, ca laptopul să verifice des cu o singură comandă și să citească lista doar când e ceva nou.
+const SIGNAL = "argus:semnal";
 const KEEP = 50;
 
 function redis() {
@@ -62,13 +64,27 @@ export async function getCerere(id: string): Promise<Cerere | null> {
 export async function saveCerere(cerere: Cerere) {
   // 30 de zile e destul ca istoric; coada nu crește la nesfârșit.
   await command("SET", key(cerere.id), JSON.stringify(cerere), "EX", 60 * 60 * 24 * 30);
+  await command("INCR", SIGNAL);
 }
 
-export async function addCerere(titlu: string, text: string): Promise<Cerere> {
+export async function readSignal(): Promise<string> {
+  return String((await command<string | null>("GET", SIGNAL)) ?? "0");
+}
+
+// Cu `confirmare`, Daniel a apăsat deja Da pe telefon (de exemplu la un mesaj), deci laptopul doar execută.
+export async function addCerere(titlu: string, text: string, confirmare?: Cerere["confirmare"]): Promise<Cerere> {
   const now = new Date().toISOString();
-  const cerere: Cerere = { id: crypto.randomUUID(), titlu, cerere: text, status: "nouă", creat: now, actualizat: now };
-  await saveCerere(cerere);
+  const cerere: Cerere = {
+    id: crypto.randomUUID(),
+    titlu,
+    cerere: text,
+    status: confirmare ? "confirmată" : "nouă",
+    creat: now,
+    actualizat: now,
+    confirmare,
+  };
   await command("LPUSH", LIST, cerere.id);
   await command("LTRIM", LIST, 0, KEEP - 1);
+  await saveCerere(cerere);
   return cerere;
 }

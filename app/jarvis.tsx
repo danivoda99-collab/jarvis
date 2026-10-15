@@ -358,7 +358,26 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const request = asText(parameters.cerere);
       if (!request) return "Lipsește cererea.";
       // Trimiterea către laptop nu mai cere „Da”: Claude cere o singură confirmare, la final, înainte să trimită ceva în afară.
-      return callApi("/api/cereri", "POST", { titlu: title, cerere: request });
+      const result = await callApi("/api/cereri", "POST", { titlu: title, cerere: request });
+      window.dispatchEvent(new Event("argus-cerere"));
+      return result;
+    },
+    // Un mesaj gata formulat: Daniel confirmă aici, o singură dată, iar laptopul doar îl trimite.
+    mesaj_trimite: async (parameters: { canal?: unknown; destinatar?: unknown; text?: unknown }) => {
+      const channel = asText(parameters.canal).toLowerCase() === "mail" ? "mail" : "WhatsApp";
+      const recipient = asText(parameters.destinatar);
+      const text = asText(parameters.text);
+      if (!recipient || !text) return "Lipsește destinatarul sau textul.";
+      const title = `Trimit pe ${channel} lui ${recipient}`;
+      const answer = await confirm(`${title}?`, text, recipient, channel === "mail" ? "gmail" : undefined);
+      if (answer !== "da") return "Daniel nu a confirmat. Mesajul NU a fost trimis.";
+      const result = await callApi("/api/cereri", "POST", {
+        titlu: title,
+        cerere: `${title} exact textul confirmat.`,
+        confirmat: { titlu: title, text, destinatar: `${recipient} (${channel})` },
+      });
+      window.dispatchEvent(new Event("argus-cerere"));
+      return result.startsWith("Eroare") ? result : "Trimis la laptop; Daniel aude când pleacă mesajul.";
     },
     claude_cereri: async () => {
       const raw = await callApi("/api/cereri");
@@ -390,8 +409,29 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     } catch {
       seen = new Date().toISOString();
     }
+    let lastSignal = "";
+    let open = false; // o cerere e în lucru pe laptop: verificăm des, ca rezultatul să apară imediat
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function schedule() {
+      clearTimeout(timer);
+      if (!stopped) timer = setTimeout(tick, open ? 2_000 : 15_000);
+    }
+    async function tick() {
+      await poll();
+      schedule();
+    }
     async function poll() {
       if (stopped || document.hidden) return;
+      try {
+        const response = await fetch("/api/cereri?semnal=1", { cache: "no-store" });
+        if (response.ok) {
+          const { semnal } = (await response.json()) as { semnal?: string };
+          if (semnal && semnal === lastSignal) return;
+          lastSignal = semnal ?? "";
+        }
+      } catch {
+        return;
+      }
       let cereri: Cerere[] = [];
       try {
         const response = await fetch("/api/cereri", { cache: "no-store" });
@@ -425,23 +465,33 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           const title = item.status === "gata" ? `Claude a terminat: ${item.titlu}` : `Claude n-a reușit: ${item.titlu}`;
           addCard({ id: crypto.randomUUID(), kind: "summary", title, text: item.rezultat || "" });
           log("agent", title);
+          // Prima propoziție din rezultat („Trimis lui Jess pe WhatsApp.”) se spune cu voce.
+          const first = (item.rezultat || "").split(/(?<=[.!?])\s|\n/)[0]?.slice(0, 200) || title;
+          void report(item.status === "gata" ? first : `Claude n-a reușit: ${first}`);
         }
         if (item.actualizat > latest) latest = item.actualizat;
       }
       seen = latest;
+      open = cereri.some((item) => ["nouă", "în lucru", "confirmată"].includes(item.status));
       try {
         localStorage.setItem(SEEN_KEY, seen);
       } catch {
         // fără memorare: la următoarea deschidere pot reapărea ultimele rezultate
       }
     }
-    void poll();
-    const timer = setInterval(poll, 20_000);
-    document.addEventListener("visibilitychange", poll);
+    // După ce Argus trimite o cerere, verificăm imediat și des.
+    const wake = () => {
+      open = true;
+      void tick();
+    };
+    void tick();
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("argus-cerere", wake);
     return () => {
       stopped = true;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", poll);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("argus-cerere", wake);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -510,6 +560,16 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     if (!activeRef.current || silentRef.current || phaseRef.current !== "listening") return;
     const decision = (text || title).slice(0, 300);
     await say(spokenLanguage() === "ro" ? `Am formulat așa: ${decision}` : `Here is how I put it: ${decision}`);
+    if (activeRef.current && (phaseRef.current as Phase) === "speaking") {
+      setPhase("listening");
+      listen();
+    }
+  }
+
+  // Rezultatul de pe laptop se spune pe scurt, dacă Argus ascultă în acel moment.
+  async function report(text: string) {
+    if (!activeRef.current || silentRef.current || phaseRef.current !== "listening" || answers.current.size > 0) return;
+    await say(text);
     if (activeRef.current && (phaseRef.current as Phase) === "speaking") {
       setPhase("listening");
       listen();

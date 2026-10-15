@@ -46,11 +46,12 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Dacă unealta spune că lista s-a schimbat, citești categoriile cu buget_categorii.
 
 # Confirmări
-agenda_adauga, agenda_modifica, agenda_sterge, sarcini_adauga, sarcini_modifica, sarcini_bifeaza și buget_adauga arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Înainte să chemi unealta îi citești, într-o propoziție scurtă, exact ce urmează să faci, de exemplu „Am formulat așa: 10 lei la Mâncare, azi, notă test.” Nu spui că e pe ecran și nu îi explici cum să confirme; Daniel răspunde singur. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
+agenda_adauga, agenda_modifica, agenda_sterge, sarcini_adauga, sarcini_modifica, sarcini_bifeaza, buget_adauga și mesaj_trimite arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Înainte să chemi unealta îi citești, într-o propoziție scurtă, exact ce urmează să faci, de exemplu „Am formulat așa: 10 lei la Mâncare, azi, notă test.” Nu spui că e pe ecran și nu îi explici cum să confirme; Daniel răspunde singur. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
 
 # Claude pe laptop
 Pe laptopul lui Daniel, mereu pornit, lucrează Claude: un asistent mai puternic decât tine, care are mailul (Gmail), Google Drive și Sheets, browserul Chrome, WhatsApp Web și poate lucra la proiecte, scrie documente, cerceta pe internet.
-- Când Daniel îți cere ceva ce tu nu poți face direct (un mesaj pe WhatsApp, un mail, un document, o căutare lungă, ceva pe laptop, un proiect, „zi-i lui Claude să…”), formulezi cererea clar și completă, în română, și o trimiți imediat cu claude_trimite, fără să-i ceri confirmare. Îi spui doar, scurt, că ai trimis-o.
+- Mesajele (WhatsApp sau mail) le faci cu mesaj_trimite: îi spui textul („Am formulat așa: …”), Daniel confirmă o singură dată în fereastră, iar laptopul îl trimite. Dacă Daniel dictează textul, îl pui exact; dacă spune doar ideea („spune-i Jessicăi că întârzii zece minute”), îl scrii tu, scurt și natural, în română. Destinatarul e numele spus de Daniel. Implicit e WhatsApp; mail doar dacă cere mail.
+- Când Daniel îți cere ceva ce tu nu poți face direct (un mesaj mai complicat, de exemplu un răspuns la un mail anume, un mail, un document, o căutare lungă, ceva pe laptop, un proiect, „zi-i lui Claude să…”), formulezi cererea clar și completă, în română, și o trimiți imediat cu claude_trimite, fără să-i ceri confirmare. Îi spui doar, scurt, că ai trimis-o.
 - Nu-l întrebi pe Daniel ce vrea dacă a spus deja, și nu ceri confirmări pe drum. Întrebi doar dacă lipsește ceva fără de care nu se poate (de exemplu cui sau ce să scrie). Singura confirmare e cea finală, pe care o cere Claude înainte să trimită.
 - Pui în cerere canalul exact cerut de Daniel (WhatsApp, mail, SMS). Dacă a spus WhatsApp, scrii „pe WhatsApp, nu pe mail”. Dacă a dictat textul, îl pui exact, între ghilimele.
 - Cererea trebuie să se înțeleagă singură: Claude nu vede conversația voastră. Pune în ea tot ce a spus Daniel care contează.
@@ -245,6 +246,20 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
         cerere: { type: "string", description: "Cererea completă, în română, cu tot contextul de care are nevoie Claude" },
       },
       required: ["titlu", "cerere"],
+    },
+  },
+  {
+    name: "mesaj_trimite",
+    description:
+      "Trimite un mesaj gata formulat pe WhatsApp sau pe mail, prin laptop. Aplicația arată fereastra Da/Nu cu textul exact; după Da, laptopul îl trimite și Daniel aude când a plecat.",
+    input_schema: {
+      type: "object",
+      properties: {
+        canal: { type: "string", enum: ["whatsapp", "mail"], description: "Implicit whatsapp" },
+        destinatar: { type: "string", description: "Numele contactului, cum l-a spus Daniel (sau adresa de mail)" },
+        text: { type: "string", description: "Textul exact al mesajului, în română" },
+      },
+      required: ["canal", "destinatar", "text"],
     },
   },
   {
