@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { QueueError, addCerere, getCerere, listCereri, saveCerere, type Cerere, type Status } from "@/lib/cereri";
+import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, type Cerere, type Status } from "@/lib/cereri";
 
 // Cererile pentru Claude de pe laptop. Telefonul și laptopul sunt logate amândouă cu codul lui Daniel.
 
@@ -13,10 +13,13 @@ async function guard() {
   return (await isAuthenticated()) ? null : NextResponse.json({ error: "Neautentificat." }, { status: 401 });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const denied = await guard();
   if (denied) return denied;
   try {
+    if (new URL(request.url).searchParams.has("semnal")) {
+      return NextResponse.json({ semnal: await readSignal() }, { headers: { "Cache-Control": "no-store" } });
+    }
     return NextResponse.json({ cereri: await listCereri() }, { headers: { "Cache-Control": "no-store" } });
   } catch (caught) {
     return failure(caught);
@@ -27,11 +30,22 @@ export async function GET() {
 export async function POST(request: Request) {
   const denied = await guard();
   if (denied) return denied;
-  const body = (await request.json().catch(() => ({}))) as { titlu?: string; cerere?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    titlu?: string;
+    cerere?: string;
+    confirmat?: { titlu?: string; text?: string; destinatar?: string };
+  };
   const text = (body.cerere ?? "").trim().slice(0, 4000);
   if (!text) return NextResponse.json({ error: "Lipsește cererea." }, { status: 400 });
+  const confirmed = body.confirmat?.text
+    ? {
+        titlu: String(body.confirmat.titlu ?? "").slice(0, 200),
+        text: String(body.confirmat.text).slice(0, 4000),
+        destinatar: body.confirmat.destinatar ? String(body.confirmat.destinatar).slice(0, 200) : undefined,
+      }
+    : undefined;
   try {
-    const cerere = await addCerere((body.titlu ?? "").trim().slice(0, 120) || text.slice(0, 60), text);
+    const cerere = await addCerere((body.titlu ?? "").trim().slice(0, 120) || text.slice(0, 60), text, confirmed);
     return NextResponse.json({ ok: true, id: cerere.id });
   } catch (caught) {
     return failure(caught);

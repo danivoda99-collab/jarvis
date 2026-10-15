@@ -13,7 +13,10 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = join(HERE, "config.json");
-const POLL_MS = 15_000;
+// Verifică des (o singură comandă ieftină); după o cerere, și mai des câteva minute.
+const POLL_MS = 8_000;
+const FAST_POLL_MS = 2_000;
+const FAST_FOR_MS = 5 * 60_000;
 const RUN_TIMEOUT_MS = 15 * 60_000;
 
 // Ce poate face Claude singur: citit, căutat, scris, comenzi, ciorne.
@@ -46,6 +49,7 @@ const DEFAULTS = {
   url: "https://jarvis-one-psi-36.vercel.app",
   folder: join(homedir(), "argus", "proiecte"),
   claude: "claude",
+  model: "sonnet", // mai rapid decât Opus pentru treburile de zi cu zi; se poate schimba în config.json
 };
 
 const RULES = `Lucrezi pe laptopul lui Daniel și primești cereri de la Argus, asistentul lui vocal.
@@ -68,7 +72,9 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
-9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). După „Da”, deschizi web.whatsapp.com în Chrome, cauți contactul exact, lipești textul confirmat, fără nicio schimbare, și îl trimiți. Dacă nu găsești contactul, sunt mai mulți cu același nume sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce. Altceva în Chrome nu faci.
+9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). După „Da”, în Chrome, în tabul web.whatsapp.com (îl deschizi dacă lipsește): scrii numele în căutare, verifici o singură dată cu textul paginii că e exact contactul, deschizi conversația, scrii textul confirmat, fără nicio schimbare, și apeși Enter. Lucrezi repede: folosești căutarea și textul paginii, nu capturi de ecran, decât dacă altfel nu merge. Dacă nu găsești contactul, sunt mai mulți cu același nume sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce. Altceva în Chrome nu faci.
+10. Mail către un nume: cauți adresa exactă în mailurile anterioare. Dacă nu e sigură, nu trimiți și spui de ce.
+11. După ce ai trimis, rezumatul începe cu o propoziție scurtă, bună de citit cu voce: de exemplu „Trimis lui Jess pe WhatsApp.”
 
 Bugetul personal (Sheet „Buget personal”, id 18aCKEXM5g2cSpyjZVp8lPwnunvMEwTdX4MJhK44OMW0):
 - O cheltuială = un rând nou în tabul Cheltuieli, coloanele A:D (Data | Sumă | Categorie | Notă). Coloana E (Luna) e o formulă, nu o atingi.
@@ -106,8 +112,8 @@ async function login(config) {
   log("Conectat la Argus.");
 }
 
-async function api(config, method, body) {
-  const response = await fetch(`${config.url}/api/cereri`, {
+async function api(config, method, body, query = "") {
+  const response = await fetch(`${config.url}/api/cereri${query}`, {
     method,
     headers: { Cookie: `jarvis_session=${config.cookie}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -132,6 +138,7 @@ function runClaude(config, prompt, { resume, send } = {}) {
     "--append-system-prompt", RULES,
   ];
   if (browser) args.push("--chrome");
+  if (config.model) args.push("--model", config.model);
   if (resume) args.push("--resume", resume);
   return new Promise((resolve) => {
     const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
@@ -181,13 +188,18 @@ function table(value) {
 async function handle(config, cerere) {
   const send = cerere.status === "confirmată";
   log(send ? "Trimit (confirmat):" : "Cerere nouă:", cerere.titlu);
-  await api(config, "PATCH", { id: cerere.id, status: "în lucru" });
+  await api(config, "PATCH", {
+    id: cerere.id,
+    status: "în lucru",
+    rezultat: send ? `Trimit acum: ${cerere.confirmare?.titlu ?? cerere.titlu}` : undefined,
+  });
   const prompt = send
     ? [
         `Daniel a apăsat Da pentru: ${cerere.confirmare?.titlu}.`,
         `Destinatar confirmat: ${cerere.confirmare?.destinatar ?? "(nespecificat)"}`,
         `Text confirmat:\n${cerere.confirmare?.text ?? ""}`,
-        "Fă acum exact ce a confirmat. Dacă e un mail, trimite ciorna doar dacă destinatarul și textul ei sunt exact cele de mai sus; dacă diferă cu ceva, nu trimite și spune ce diferă. La final spune pe scurt ce ai făcut.",
+        `Cererea inițială: ${cerere.cerere}`,
+        "Fă acum exact ce a confirmat. Dacă e un mail și ai pregătit o ciornă, o trimiți doar dacă destinatarul și textul ei sunt exact cele de mai sus; dacă diferă cu ceva, nu trimiți și spui ce diferă. Dacă nu există ciornă, trimiți mailul cu exact textul confirmat. La final spune pe scurt ce ai făcut.",
       ].join("\n\n")
     : `Cerere de la Daniel, prin Argus (${new Date(cerere.creat).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" })}):\n\n${cerere.cerere}`;
   const run = await runClaude(config, prompt, { resume: send ? cerere.sesiune : undefined, send });
@@ -241,9 +253,19 @@ async function main() {
   mkdirSync(config.folder, { recursive: true });
   if (!config.cookie) await login(config);
   log(`Puntea Argus pornită. Verific cererile la ${POLL_MS / 1000} secunde. Folder: ${config.folder}`);
+  let lastSignal = null;
+  let busyUntil = 0;
   for (;;) {
     if (updated()) return restart();
     try {
+      // Întâi semnalul (o comandă); lista se citește doar când s-a schimbat ceva.
+      const { semnal } = await api(config, "GET", undefined, "?semnal=1");
+      if (semnal !== undefined && semnal === lastSignal) {
+        await new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
+        continue;
+      }
+      lastSignal = semnal ?? null;
+      busyUntil = Date.now() + FAST_FOR_MS;
       const { cereri = [] } = await api(config, "GET");
       // Cele mai vechi primele; una câte una.
       const next = [...cereri].reverse().find((item) => item.status === "nouă" || item.status === "confirmată");
@@ -260,7 +282,7 @@ async function main() {
       }
       log("Nu pot verifica cererile:", error.message);
     }
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    await new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
   }
 }
 
