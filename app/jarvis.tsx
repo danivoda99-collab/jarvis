@@ -20,6 +20,7 @@ import {
   primeSpeech,
   setCloudVoice,
   speak,
+  speakStream,
   chooseLanguage,
   spokenLanguage,
   splitReply,
@@ -47,6 +48,25 @@ const GREETING = {
 };
 const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
+
+// Partea din <spoken>…</spoken> scrisă până acum și dacă s-a încheiat.
+function spokenPart(text: string): { body: string; closed: boolean } | null {
+  const start = text.indexOf("<spoken>");
+  if (start < 0) return null;
+  const rest = text.slice(start + "<spoken>".length);
+  const end = rest.indexOf("</spoken>");
+  if (end >= 0) return { body: rest.slice(0, end), closed: true };
+  // Un „</spo” început nu se citește cu voce.
+  const partialTag = rest.lastIndexOf("<");
+  return { body: partialTag >= 0 ? rest.slice(0, partialTag) : rest, closed: false };
+}
+
+// Unde se termină ultima propoziție completă (după . ! ? urmat de spațiu).
+function lastSentenceEnd(text: string): number {
+  let cut = 0;
+  for (const match of text.matchAll(/[.!?…]+\s/g)) cut = (match.index ?? 0) + match[0].length;
+  return cut;
+}
 
 // Ce s-a vorbit rămâne pe telefon (doar textul, fără unelte), ca Argus să continue de unde ați rămas.
 const MEMORY_KEY = "argus-memorie";
@@ -722,20 +742,69 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
 
     for (let step = 0; step < MAX_STEPS && activeRef.current; step += 1) {
       let data: { content?: Anthropic.Beta.BetaContentBlock[]; stop_reason?: string; error?: string };
+      // Partea vorbită pornește de la prima propoziție completă, cât Claude încă scrie restul.
+      let speaker: ReturnType<typeof speakStream> | null = null;
+      let spokenUsed = 0;
+      const feed = (text: string, done: boolean) => {
+        const part = spokenPart(text);
+        if (!part || silentRef.current || !activeRef.current) return;
+        const fresh = part.body.slice(spokenUsed);
+        const cut = done || part.closed ? fresh.length : lastSentenceEnd(fresh);
+        if (cut <= 0 || !fresh.slice(0, cut).trim()) return;
+        if (!speaker) {
+          stopListening();
+          setPhase("speaking");
+          speaker = speakStream();
+        }
+        speaker.push(fresh.slice(0, cut));
+        spokenUsed += cut;
+      };
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: historyRef.current, limba: spokenLanguage() }),
+          body: JSON.stringify({ messages: historyRef.current, limba: spokenLanguage(), flux: true }),
           cache: "no-store",
         });
         if (response.status === 401) {
           window.location.reload();
           return;
         }
-        data = await response.json();
-        if (!response.ok || !data.content) throw new Error(data.error || "Ceva n-a mers. Mai încearcă.");
+        if (response.ok && response.body && response.headers.get("Content-Type")?.includes("ndjson")) {
+          data = {};
+          let streamed = "";
+          let pending = "";
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            pending += decoder.decode(value, { stream: true });
+            const lines = pending.split("\n");
+            pending = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              const event = JSON.parse(line) as {
+                t: string;
+                d?: string;
+                error?: string;
+                content?: Anthropic.Beta.BetaContentBlock[];
+                stop_reason?: string;
+              };
+              if (event.t === "d" && event.d) {
+                streamed += event.d;
+                feed(streamed, false);
+              } else if (event.t === "end") data = { content: event.content, stop_reason: event.stop_reason };
+              else if (event.t === "err") throw new Error(event.error || "Ceva n-a mers. Mai încearcă.");
+            }
+          }
+          if (!data.content) throw new Error("Răspunsul s-a întrerupt. Mai încearcă.");
+        } else {
+          data = await response.json();
+          if (!response.ok || !data.content) throw new Error(data.error || "Ceva n-a mers. Mai încearcă.");
+        }
       } catch (caught) {
+        stopSpeaking();
         // Cererea fără răspuns iese din istoric, ca următoarea să pornească curat.
         historyRef.current = [];
         setError(caught instanceof Error ? caught.message : String(caught));
@@ -749,6 +818,13 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const reply = raw ? splitReply(raw) : null;
       if (reply?.ro) log("agent", reply.ro);
       const tools = data.content.filter((block): block is Anthropic.Beta.BetaToolUseBlock => block.type === "tool_use");
+      // Ce n-a fost încă spus din răspuns: restul, dacă a început deja pe bucăți, altfel tot.
+      const speakReply = async () => {
+        if (speaker) {
+          feed(raw, true);
+          await (speaker as ReturnType<typeof speakStream>).finish();
+        } else if (reply) await say(reply.spoken);
+      };
 
       if (data.stop_reason === "refusal") {
         await say("Sorry, I can't help with that one.");
@@ -756,11 +832,11 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       }
       if (data.stop_reason !== "tool_use" || tools.length === 0) {
         if (raw) remember(asked, raw);
-        if (reply) await say(reply.spoken);
+        await speakReply();
         break;
       }
       // Fraza dinaintea uneltelor („îți arăt pe ecran…”) se spune întâi; abia apoi se deschide fereastra și ascultăm.
-      if (reply) await say(reply.spoken);
+      await speakReply();
       if (!activeRef.current) return;
       setPhase("thinking");
       const results = await Promise.all(tools.map(runTool));

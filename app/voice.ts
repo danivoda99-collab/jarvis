@@ -192,6 +192,7 @@ export function primeSpeech() {
 }
 
 let finishCurrent: (() => void) | null = null;
+let wakeStream: (() => void) | null = null;
 let speakGeneration = 0;
 let source: AudioBufferSourceNode | null = null;
 
@@ -206,6 +207,56 @@ export function stopSpeaking() {
   window.speechSynthesis?.cancel();
   // Unele browsere nu anunță sfârșitul frazelor anulate; închidem noi promisiunea.
   finishCurrent?.();
+  wakeStream?.();
+}
+
+// Vorbește pe măsură ce sosesc propozițiile: prima pornește cât Claude încă scrie restul.
+export function speakStream(): { push: (sentence: string) => void; finish: () => Promise<void> } {
+  const ctx = cloud ? audio() : null;
+  if (!ctx) {
+    let all = "";
+    return { push: (sentence) => void (all += ` ${sentence}`), finish: () => speak(all) };
+  }
+  stopSpeaking();
+  const generation = speakGeneration;
+  const queue: Promise<ArrayBuffer>[] = [];
+  let ended = false;
+  const wake = () => {
+    const resume = wakeStream;
+    wakeStream = null;
+    resume?.();
+  };
+  const loop = (async () => {
+    if (ctx.state !== "running") await ctx.resume().catch(() => {});
+    for (let index = 0; ; ) {
+      if (generation !== speakGeneration) return;
+      if (index >= queue.length) {
+        if (ended) return;
+        await new Promise<void>((resolve) => (wakeStream = resolve));
+        continue;
+      }
+      try {
+        await play(ctx, await ctx.decodeAudioData(await queue[index]), generation);
+      } catch {
+        // o bucată n-a venit de la OpenAI: trecem la următoarea
+      }
+      index += 1;
+    }
+  })();
+  return {
+    push(sentence) {
+      if (!sentence.trim() || generation !== speakGeneration) return;
+      const pending = fetchSpeech(sentence.trim());
+      pending.catch(() => {});
+      queue.push(pending);
+      wake();
+    },
+    finish() {
+      ended = true;
+      wake();
+      return loop;
+    },
+  };
 }
 
 export function speak(text: string): Promise<void> {
@@ -306,7 +357,7 @@ function recorderType(): string {
   return "";
 }
 
-const SILENCE_MS = 1500; // după atâta liniște, Daniel a terminat
+const SILENCE_MS = 1200; // după atâta liniște, Daniel a terminat
 let userTalking = false; // Daniel vorbește chiar acum; Argus nu-l întrerupe cu anunțuri
 
 export function isUserTalking() {
