@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
+import { firstSentence, markOpen, notify } from "@/lib/push";
 import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, type Cerere, type Status } from "@/lib/cereri";
 
 // Cererile pentru Claude de pe laptop. Telefonul și laptopul sunt logate amândouă cu codul lui Daniel.
@@ -17,7 +18,10 @@ export async function GET(request: Request) {
   const denied = await guard();
   if (denied) return denied;
   try {
-    if (new URL(request.url).searchParams.has("semnal")) {
+    const params = new URL(request.url).searchParams;
+    // Telefonul cu aplicația deschisă: rezultatele le aude direct, deci fără notificări.
+    if (params.has("tel")) await markOpen();
+    if (params.has("semnal")) {
       return NextResponse.json({ semnal: await readSignal() }, { headers: { "Cache-Control": "no-store" } });
     }
     return NextResponse.json({ cereri: await listCereri() }, { headers: { "Cache-Control": "no-store" } });
@@ -81,6 +85,11 @@ export async function PATCH(request: Request) {
       sesiune: body.sesiune ?? current.sesiune,
     };
     await saveCerere(updated);
+    if (updated.status === "gata") await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);
+    if (updated.status === "eroare") await notify(`N-a mers: ${updated.titlu}`, firstSentence(updated.rezultat), updated.id);
+    if (updated.status === "așteaptă confirmare") {
+      await notify(`Aștept „Da”: ${updated.confirmare?.titlu ?? updated.titlu}`, updated.confirmare?.text ?? "", updated.id);
+    }
     return NextResponse.json({ ok: true });
   } catch (caught) {
     return failure(caught);
