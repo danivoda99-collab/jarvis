@@ -896,6 +896,41 @@ body {
   }
 }
 
+/* Pe telefon, panoul Sistem (limbă, voce) se deschide peste ecran din butonul „Setări”. */
+.topbar .settings-toggle {
+  margin-left: auto;
+  margin-right: 14px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ivory-muted);
+  background: none;
+  border: 1px solid rgba(212, 166, 74, 0.25);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.panel-left.open {
+  display: block;
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  top: calc(env(safe-area-inset-top) + 64px);
+  z-index: 15;
+  background: rgba(14, 14, 16, 0.96);
+}
+
+@media (min-width: 960px) {
+  .topbar .settings-toggle {
+    display: none;
+  }
+
+  .panel-left.open {
+    position: static;
+    background: rgba(23, 23, 26, 0.72);
+  }
+}
+
 .power {
   position: fixed;
   inset: 0;

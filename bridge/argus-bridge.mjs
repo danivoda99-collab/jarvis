@@ -23,6 +23,9 @@ const WORK_TOOLS = [
   "mcp__claude_ai_Gmail__create_draft", "mcp__claude_ai_Gmail__update_draft",
   "mcp__claude_ai_Google_Calendar__list_events", "mcp__claude_ai_Google_Drive__search_files",
   "mcp__claude_ai_Google_Drive__read_file_content",
+  "mcp__claude_ai_Google_Sheets__get_spreadsheet", "mcp__claude_ai_Google_Sheets__get_values",
+  "mcp__claude_ai_Google_Sheets__update_values", "mcp__claude_ai_Google_Sheets__append_values",
+  "mcp__claude_ai_Google_Sheets__update_formulas",
 ];
 // După „Da”: aceleași unelte plus trimiterea ciornei confirmate.
 const SEND_TOOLS = ["mcp__claude_ai_Gmail__send_draft", "mcp__claude_ai_Gmail__send_message"];
@@ -32,7 +35,7 @@ const BLOCKED = [
   "Bash(format:*)", "Bash(diskpart:*)", "Bash(shutdown:*)", "Bash(reg:*)", "Bash(git push --force:*)",
   "Bash(git push -f:*)", "Bash(git reset --hard:*)", "Bash(git clean:*)", "Bash(curl:*)", "Bash(Invoke-WebRequest:*)",
   "mcp__claude_ai_Gmail__trash_message", "mcp__claude_ai_Gmail__trash_thread", "mcp__claude_ai_Google_Drive__trash_file",
-  "mcp__claude_ai_Google_Calendar__delete_event",
+  "mcp__claude_ai_Google_Calendar__delete_event", "mcp__claude_ai_Google_Sheets__batch_clear_values",
 ];
 
 const DEFAULTS = {
@@ -57,7 +60,14 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 3. Nu ceri, nu scrii și nu salvezi parole, coduri sau numere de card.
 4. Nu lucrezi cu date personale ale clienților OVB. Doar cifre agregate și date despre echipă.
 5. Nu ștergi nimic.
-6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar.
+6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
+
+Bugetul personal (Sheet „Buget personal”, id 18aCKEXM5g2cSpyjZVp8lPwnunvMEwTdX4MJhK44OMW0):
+- O cheltuială = un rând nou în tabul Cheltuieli, coloanele A:D (Data | Sumă | Categorie | Notă). Coloana E (Luna) e o formulă, nu o atingi.
+- Scrii cu update_values pe primul rând gol (nu cu append_values: inserează rânduri și strică formula din E1). Data ca =DATE(aaaa,ll,zz).
+- Categoria doar din tabul Categorii (A2:A26). Dacă nu e clară, întrebi prin CONFIRMARE.
+- Nu suprascrii rânduri existente decât dacă Daniel cere exact acel rând.
+- Când nu ești sigur (categoria, ce rând să corectezi, suma), nu scrii nimic: îi arăți rândurile relevante ca un tabel scurt (cel mult 5 rânduri) și întrebarea, prin CONFIRMARE.
 Dacă o cerere încalcă o regulă, nu o faci și explici scurt de ce.`;
 
 function loadConfig() {
