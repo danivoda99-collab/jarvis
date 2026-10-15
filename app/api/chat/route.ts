@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { ARGUS_SYSTEM, ARGUS_TOOLS } from "@/lib/argus";
+import { ARGUS_SYSTEM, ARGUS_TOOLS, SPOKEN_ROMANIAN } from "@/lib/argus";
 
 // Un pas din conversație: aplicația trimite istoricul, Claude răspunde cu text sau cu unelte de rulat.
 // Cheia API rămâne pe server; uneltele rulează în browser, ca să poată arăta ferestre și cere confirmări.
@@ -21,9 +21,11 @@ export async function POST(request: Request) {
   }
 
   let messages: Anthropic.Beta.BetaMessageParam[];
+  let romanian = false;
   try {
-    const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[] };
+    const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[]; limba?: string };
     messages = Array.isArray(body.messages) ? body.messages : [];
+    romanian = body.limba === "ro";
   } catch {
     return NextResponse.json({ error: "Cerere invalidă." }, { status: 400 });
   }
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
     const response = await client.beta.messages.create({
       model: MODEL,
       max_tokens: 4000,
-      system: ARGUS_SYSTEM,
+      system: romanian ? ARGUS_SYSTEM + SPOKEN_ROMANIAN : ARGUS_SYSTEM,
       tools: ARGUS_TOOLS,
       messages,
       // Răspunsuri vocale scurte: gândire puțină, ca să vină repede.

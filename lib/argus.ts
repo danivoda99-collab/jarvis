@@ -72,6 +72,12 @@ const MODUL = {
   description: "Modulul de care ține fereastra, dacă e cazul",
 } as const;
 
+// Când Daniel alege vocea în română din aplicație, partea vorbită trece și ea pe română.
+export const SPOKEN_ROMANIAN = `
+
+# Limba vocii: ROMÂNĂ (alegerea lui Daniel, are prioritate față de ce scrie mai sus)
+Răspunsul vorbit e acum în română, nu în engleză. În <spoken> scrii răspunsul în română naturală, de vorbit, cu diacritice. În <ro> pui același răspuns. Fără liste sau simboluri în <spoken>, doar fraze care sună bine citite cu voce tare.`;
+
 export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "arata_rezumat",

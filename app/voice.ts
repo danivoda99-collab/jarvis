@@ -105,6 +105,26 @@ export function englishVoices(): SpeechSynthesisVoice[] {
 }
 
 const VOICE_KEY = "argus-voce";
+const LANGUAGE_KEY = "argus-limba";
+
+export type Language = "en" | "ro";
+
+// În ce limbă îi vorbește Argus lui Daniel. Scrisul rămâne mereu în română.
+export function spokenLanguage(): Language {
+  try {
+    return localStorage.getItem(LANGUAGE_KEY) === "ro" ? "ro" : "en";
+  } catch {
+    return "en";
+  }
+}
+
+export function chooseLanguage(language: Language) {
+  try {
+    localStorage.setItem(LANGUAGE_KEY, language);
+  } catch {
+    // fără memorare; rămâne engleza
+  }
+}
 
 export function chosenVoiceName(): string {
   try {
@@ -124,6 +144,9 @@ export function chooseVoice(name: string) {
 }
 
 function browserVoice(): SpeechSynthesisVoice | null {
+  if (spokenLanguage() === "ro") {
+    return window.speechSynthesis?.getVoices().find((voice) => voice.lang.toLowerCase().startsWith("ro")) ?? null;
+  }
   const voices = englishVoices();
   const saved = chosenVoiceName();
   return voices.find((voice) => voice.name === saved) ?? voices[0] ?? null;
@@ -207,7 +230,7 @@ async function fetchSpeech(text: string): Promise<ArrayBuffer> {
   const response = await fetch("/api/vorbeste", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voce: chosenVoiceName() || cloudDefault }),
+    body: JSON.stringify({ text, voce: chosenVoiceName() || cloudDefault, limba: spokenLanguage() }),
   });
   if (!response.ok) throw new Error(String(response.status));
   return response.arrayBuffer();
@@ -424,7 +447,7 @@ function browserSpeak(text: string): Promise<void> {
         utterance.voice = voice;
         utterance.lang = voice.lang;
       } else {
-        utterance.lang = "en-US";
+        utterance.lang = spokenLanguage() === "ro" ? "ro-RO" : "en-US";
       }
       utterance.rate = 1.03;
       utterance.onend = done;
