@@ -54,16 +54,26 @@ export async function POST(request: Request) {
   }
 }
 
-// Bifează o sarcină ca făcută (nu o șterge).
+// Bifează o sarcină ca făcută (nu o șterge) sau îi schimbă titlul, scadența ori notițele.
 export async function PATCH(request: Request) {
   const denied = await guard();
   if (denied) return denied;
-  const body = (await request.json().catch(() => ({}))) as { id?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    titlu?: string;
+    scadenta?: string;
+    notite?: string;
+  };
   if (!body.id) return NextResponse.json({ error: "Lipsește sarcina." }, { status: 400 });
+  const changes: Record<string, unknown> = {};
+  if (body.titlu) changes.title = body.titlu;
+  if (body.notite !== undefined) changes.notes = body.notite;
+  if (body.scadenta) changes.due = `${body.scadenta.slice(0, 10)}T00:00:00.000Z`;
+  if (Object.keys(changes).length === 0) changes.status = "completed";
   try {
     await google(`${TASKS}/${encodeURIComponent(body.id)}`, {
       method: "PATCH",
-      body: JSON.stringify({ status: "completed" }),
+      body: JSON.stringify(changes),
     });
     return NextResponse.json({ ok: true });
   } catch (caught) {

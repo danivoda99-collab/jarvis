@@ -7,7 +7,20 @@ import CardStack, { type Answer, type Card } from "./cards";
 import Orb, { type Module, type OrbHandle } from "./orb";
 import WindowLinks from "./links";
 import { blipSound, bootSound } from "./sounds";
-import { canListen, chooseVoice, chosenVoiceName, englishVoices, listenOnce, primeSpeech, speak, splitReply, stopSpeaking } from "./voice";
+import {
+  canListen,
+  chooseVoice,
+  chosenVoiceName,
+  closeMic,
+  englishVoices,
+  listenOnce,
+  openMic,
+  primeSpeech,
+  setCloudVoice,
+  speak,
+  splitReply,
+  stopSpeaking,
+} from "./voice";
 
 type Line = { role: "user" | "agent"; text: string; at: string };
 
@@ -242,6 +255,41 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         descriere: asText(parameters.descriere) || undefined,
       });
     },
+    agenda_modifica: async (parameters: {
+      id?: unknown;
+      titlu_actual?: unknown;
+      titlu?: unknown;
+      inceput?: unknown;
+      sfarsit?: unknown;
+      descriere?: unknown;
+    }) => {
+      const title = asText(parameters.titlu);
+      const start = asText(parameters.inceput);
+      const end = asText(parameters.sfarsit);
+      const description = asText(parameters.descriere);
+      const changes = [
+        title && `Titlu nou: ${title}`,
+        start && `Început: ${start.replace("T", " ")}`,
+        end && `Sfârșit: ${end.replace("T", " ")}`,
+        description && `Descriere: ${description}`,
+      ].filter(Boolean);
+      const details = [asText(parameters.titlu_actual) || "Evenimentul ales", ...changes].join("\n");
+      const answer = await confirm("Modific în agendă?", details, undefined, "agenda");
+      if (answer !== "da") return "Daniel nu a confirmat. Evenimentul NU a fost modificat.";
+      return callApi("/api/agenda", "PATCH", {
+        id: asText(parameters.id),
+        titlu: title || undefined,
+        inceput: start || undefined,
+        sfarsit: end || undefined,
+        descriere: description || undefined,
+      });
+    },
+    agenda_sterge: async (parameters: { id?: unknown; titlu?: unknown; cand?: unknown }) => {
+      const details = [asText(parameters.titlu) || "Evenimentul ales", asText(parameters.cand)].filter(Boolean).join("\n");
+      const answer = await confirm("Șterg din agendă?", `${details}\nRămâne 30 de zile în Coșul calendarului.`, undefined, "agenda");
+      if (answer !== "da") return "Daniel nu a confirmat. Evenimentul NU a fost șters.";
+      return callApi("/api/agenda", "DELETE", { id: asText(parameters.id) });
+    },
     sarcini_citeste: () => callApi("/api/sarcini"),
     sarcini_adauga: async (parameters: { titlu?: unknown; scadenta?: unknown; notite?: unknown }) => {
       const title = asText(parameters.titlu);
@@ -258,6 +306,28 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const answer = await confirm("Bifez ca făcută?", asText(parameters.titlu) || "Sarcina aleasă", undefined, "sarcini");
       if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost bifată.";
       return callApi("/api/sarcini", "PATCH", { id: asText(parameters.id) });
+    },
+    sarcini_modifica: async (parameters: {
+      id?: unknown;
+      titlu_actual?: unknown;
+      titlu?: unknown;
+      scadenta?: unknown;
+      notite?: unknown;
+    }) => {
+      const title = asText(parameters.titlu);
+      const due = asText(parameters.scadenta);
+      const notes = asText(parameters.notite);
+      const changes = [title && `Titlu nou: ${title}`, due && `Scadență: ${due}`, notes && `Notițe: ${notes}`].filter(Boolean);
+      if (changes.length === 0) return "Nu ai dat nicio schimbare.";
+      const details = [asText(parameters.titlu_actual) || "Sarcina aleasă", ...changes].join("\n");
+      const answer = await confirm("Modific în to-do?", details, undefined, "sarcini");
+      if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost modificată.";
+      return callApi("/api/sarcini", "PATCH", {
+        id: asText(parameters.id),
+        titlu: title || undefined,
+        scadenta: due || undefined,
+        notite: notes || undefined,
+      });
     },
     buget_categorii: () => callApi("/api/buget"),
     buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
@@ -299,16 +369,32 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     setLines((previous) => [...previous, { role, text, at: timeOf(new Date()) }].slice(-30));
   }
 
-  // Lista vocilor englezești apare cu întârziere în unele browsere.
+  // Vocea vine de la OpenAI dacă serverul are cheia; altfel din browser, a cărui listă apare cu întârziere.
   useEffect(() => {
-    const load = () => {
+    let cloud = false;
+    const loadBrowser = () => {
+      if (cloud) return;
       const list = englishVoices();
       setVoices(list.map((voice) => voice.name));
       setVoiceName(chosenVoiceName() || list[0]?.name || "");
     };
-    load();
-    window.speechSynthesis?.addEventListener?.("voiceschanged", load);
-    return () => window.speechSynthesis?.removeEventListener?.("voiceschanged", load);
+    loadBrowser();
+    window.speechSynthesis?.addEventListener?.("voiceschanged", loadBrowser);
+    fetch("/api/voce", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { cloud?: boolean; voci?: string[]; implicita?: string } | null) => {
+        if (!data?.cloud || !data.voci?.length) return;
+        cloud = true;
+        const fallback = data.implicita || data.voci[0];
+        setCloudVoice(true, fallback);
+        const saved = chosenVoiceName();
+        if (!data.voci.includes(saved)) chooseVoice(fallback);
+        setVoices(data.voci);
+        setVoiceName(data.voci.includes(saved) ? saved : fallback);
+        setCanListenNow(canListen());
+      })
+      .catch(() => {});
+    return () => window.speechSynthesis?.removeEventListener?.("voiceschanged", loadBrowser);
   }, []);
 
   function stopListening() {
@@ -336,17 +422,24 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     stopListenRef.current = listenOnce(
       ({ text, final }) => {
         if (generation !== listenGenRef.current) return;
-        setHeard(text);
+        setHeard(text === "…" ? "Transcriu…" : text);
         levelRef.current = 0.6;
-        if (final) finalText = text;
+        // La final rămâne ce s-a auzit ultima dată; vocea se oprește singură după o pauză.
+        if (final || text.length >= finalText.length) finalText = text;
       },
-      (error) => {
+      (error, message) => {
         if (generation !== listenGenRef.current) return;
         setHeard("");
         if (!activeRef.current) return;
         if (error === "not-allowed" || error === "service-not-allowed") {
           setError("Am nevoie de acces la microfon. Permite-l din setările browserului și mai încearcă.");
           end();
+          return;
+        }
+        if (error === "server") {
+          // Transcrierea n-a mers: spune de ce și ascultă din nou.
+          setError(message || "Nu te-am putut auzi. Mai spune o dată.");
+          setTimeout(listen, 600);
           return;
         }
         if (error === "unsupported") {
@@ -371,6 +464,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           if (quietRef.current >= QUIET_ROUNDS && answers.current.size === 0) end();
           else setTimeout(listen, 150);
         }
+      },
+      (level) => {
+        if (generation === listenGenRef.current) levelRef.current = Math.max(levelRef.current, level);
       },
     );
   }
@@ -457,6 +553,15 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   async function begin() {
     setError("");
     primeSpeech();
+    const micError = await openMic();
+    if (micError) {
+      setError(
+        micError === "not-allowed"
+          ? "Am nevoie de acces la microfon. Permite-l din setările browserului și mai încearcă."
+          : "Nu am putut porni microfonul. Mai încearcă.",
+      );
+      return;
+    }
     activeRef.current = true;
     silentRef.current = false;
     historyRef.current = [];
@@ -474,6 +579,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     activeRef.current = false;
     stopListening();
     stopSpeaking();
+    closeMic();
     setHeard("");
     setPhase("idle");
     // O confirmare rămasă deschisă când se închide conversația nu mai poate aproba nimic.
