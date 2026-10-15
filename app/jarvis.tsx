@@ -68,20 +68,41 @@ function lastSentenceEnd(text: string): number {
   return cut;
 }
 
-// Ce s-a vorbit rămâne pe telefon (doar textul, fără unelte), ca Argus să continue de unde ați rămas.
+// Ce s-a vorbit (doar textul, fără unelte) stă în memoria comună de pe server, ca Argus să continue de unde
+// ați rămas pe orice dispozitiv. Copia de pe telefon ajută când serverul nu răspunde.
 const MEMORY_KEY = "argus-memorie";
 const MEMORY_KEEP = 24; // ultimele 12 schimburi
+function cleanMemory(saved: { role: "user" | "assistant"; content: string }[]): Message[] {
+  const messages = saved.filter((item) => typeof item.content === "string" && item.content);
+  while (messages.length && messages[0].role !== "user") messages.shift();
+  return messages.at(-1)?.role === "assistant" ? messages : [];
+}
 function loadMemory(): Message[] {
   try {
-    const saved = JSON.parse(localStorage.getItem(MEMORY_KEY) ?? "[]") as { role: "user" | "assistant"; content: string }[];
-    const messages = saved.filter((item) => typeof item.content === "string" && item.content);
-    while (messages.length && messages[0].role !== "user") messages.shift();
-    return messages.at(-1)?.role === "assistant" ? messages : [];
+    return cleanMemory(JSON.parse(localStorage.getItem(MEMORY_KEY) ?? "[]"));
   } catch {
     return [];
   }
 }
+async function fetchMemory(): Promise<Message[]> {
+  try {
+    const response = await fetch("/api/memorie", { cache: "no-store" });
+    if (response.ok) {
+      const { conversatie = [] } = (await response.json()) as { conversatie?: Message[] };
+      const messages = cleanMemory(conversatie as { role: "user" | "assistant"; content: string }[]);
+      if (messages.length) return messages;
+    }
+  } catch {
+    // folosim copia de pe telefon
+  }
+  return loadMemory();
+}
 function remember(user: string, assistant: string) {
+  void fetch("/api/memorie", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user, assistant }),
+  }).catch(() => undefined);
   try {
     const messages = [
       ...loadMemory(),
@@ -90,8 +111,16 @@ function remember(user: string, assistant: string) {
     ].slice(-MEMORY_KEEP);
     localStorage.setItem(MEMORY_KEY, JSON.stringify(messages));
   } catch {
-    // fără memorare, următoarea conversație începe de la zero
+    // fără copie locală
   }
+}
+// Fiecare cerere și rezultatul ei ajung în jurnal (Redis + Sheet-ul „Argus – jurnal”).
+function journal(sursa: string, cerere: string, rezultat: string) {
+  void fetch("/api/jurnal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sursa, cerere, rezultat }),
+  }).catch(() => undefined);
 }
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
@@ -253,8 +282,26 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     }
   }
 
+  // Ce se face fără confirmare (to-do, buget, agenda personală) apare după aceea într-o fereastră, ca să se vadă.
+  function shown(result: string, title: string, text: string, module: Module, table?: string[][]) {
+    if (!result.startsWith("Eroare")) addCard({ id: crypto.randomUUID(), kind: "summary", title, text, table, module });
+    return result;
+  }
+
   // Unelte pe care agentul ARGUS le cheamă ca să arate ferestre pe ecran.
   const clientTools = {
+    memorie_noteaza: (parameters: { fapt?: unknown }) => {
+      const fact = asText(parameters.fapt);
+      if (!fact) return "Lipsește faptul.";
+      return callApi("/api/memorie", "POST", { fapt: fact });
+    },
+    memorie_uita: async (parameters: { fapt?: unknown }) => {
+      const fact = asText(parameters.fapt);
+      if (!fact) return "Lipsește faptul.";
+      const answer = await confirm("Uit asta?", fact);
+      if (answer !== "da") return "Daniel nu a confirmat. Faptul rămâne în memorie.";
+      return callApi("/api/memorie", "DELETE", { fapt: fact });
+    },
     arata_rezumat: (parameters: { titlu?: unknown; text?: unknown; puncte?: unknown; modul?: unknown }) => {
       const title = asText(parameters.titlu) || "Rezumat";
       const text = asText(parameters.text);
@@ -303,14 +350,13 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const start = asText(parameters.inceput);
       const end = asText(parameters.sfarsit);
       const when = [start, end].filter(Boolean).map((value) => value.replace("T", " ")).join(" – ");
-      const answer = await confirm("Adaug în agendă?", `${title}\n${when}`, undefined, "agenda");
-      if (answer !== "da") return "Daniel nu a confirmat. Evenimentul NU a fost adăugat.";
-      return callApi("/api/agenda", "POST", {
+      const result = await callApi("/api/agenda", "POST", {
         titlu: title,
         inceput: start,
         sfarsit: end || undefined,
         descriere: asText(parameters.descriere) || undefined,
       });
+      return shown(result, "Adăugat în agendă", `${title}\n${when}`, "agenda");
     },
     agenda_modifica: async (parameters: {
       id?: unknown;
@@ -351,18 +397,16 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     sarcini_adauga: async (parameters: { titlu?: unknown; scadenta?: unknown; notite?: unknown }) => {
       const title = asText(parameters.titlu);
       const due = asText(parameters.scadenta);
-      const answer = await confirm("Adaug în to-do?", due ? `${title}\nScadență: ${due}` : title, undefined, "sarcini");
-      if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost adăugată.";
-      return callApi("/api/sarcini", "POST", {
+      const result = await callApi("/api/sarcini", "POST", {
         titlu: title,
         scadenta: due || undefined,
         notite: asText(parameters.notite) || undefined,
       });
+      return shown(result, "Adăugat în to-do", due ? `${title}\nScadență: ${due}` : title, "sarcini");
     },
     sarcini_bifeaza: async (parameters: { id?: unknown; titlu?: unknown }) => {
-      const answer = await confirm("Bifez ca făcută?", asText(parameters.titlu) || "Sarcina aleasă", undefined, "sarcini");
-      if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost bifată.";
-      return callApi("/api/sarcini", "PATCH", { id: asText(parameters.id) });
+      const result = await callApi("/api/sarcini", "PATCH", { id: asText(parameters.id) });
+      return shown(result, "Bifat ca făcut", asText(parameters.titlu) || "Sarcina aleasă", "sarcini");
     },
     sarcini_modifica: async (parameters: {
       id?: unknown;
@@ -377,14 +421,13 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const changes = [title && `Titlu nou: ${title}`, due && `Scadență: ${due}`, notes && `Notițe: ${notes}`].filter(Boolean);
       if (changes.length === 0) return "Nu ai dat nicio schimbare.";
       const details = [asText(parameters.titlu_actual) || "Sarcina aleasă", ...changes].join("\n");
-      const answer = await confirm("Modific în to-do?", details, undefined, "sarcini");
-      if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost modificată.";
-      return callApi("/api/sarcini", "PATCH", {
+      const result = await callApi("/api/sarcini", "PATCH", {
         id: asText(parameters.id),
         titlu: title || undefined,
         scadenta: due || undefined,
         notite: notes || undefined,
       });
+      return shown(result, "Modificat în to-do", details, "sarcini");
     },
     buget_categorii: () => callApi("/api/buget"),
     // Cât s-a cheltuit luna asta pe fiecare categorie, față de buget: tabel pe ecran, rezumat cu voce.
@@ -412,9 +455,8 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         ["Data", "Categorie", "Sumă", "Notă"],
         [date || "azi", category, `${amount} lei`, note || "—"],
       ];
-      const answer = await confirm("Trec în buget?", "", undefined, "buget", table);
-      if (answer !== "da") return "Daniel nu a confirmat. Cheltuiala NU a fost trecută.";
-      return callApi("/api/buget", "POST", { suma: amount, categorie: category, nota: note, data: date || undefined });
+      const result = await callApi("/api/buget", "POST", { suma: amount, categorie: category, nota: note, data: date || undefined });
+      return shown(result, "Trecut în buget", "", "buget", table);
     },
     claude_trimite: async (parameters: { titlu?: unknown; cerere?: unknown }) => {
       const title = asText(parameters.titlu);
@@ -531,6 +573,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           // Prima propoziție din rezultat („Trimis lui Jess pe WhatsApp.”) se spune cu voce.
           const first = (item.rezultat || "").split(/(?<=[.!?])\s|\n/)[0]?.slice(0, 200) || title;
           void report(item.status === "gata" ? first : `Claude n-a reușit: ${first}`);
+          journal("Laptop", item.cerere, `${item.status === "gata" ? "" : "Eroare: "}${item.rezultat || ""}`);
         }
         if (item.actualizat > latest) latest = item.actualizat;
       }
@@ -735,7 +778,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     stopListening();
     setPhase("thinking");
     log("user", text);
-    if (historyRef.current.length > MAX_MESSAGES || !cleanRef.current) historyRef.current = loadMemory();
+    if (historyRef.current.length > MAX_MESSAGES || !cleanRef.current) historyRef.current = await fetchMemory();
     cleanRef.current = false;
     const asked = `${nowLine()}\n${text}`;
     historyRef.current.push({ role: "user", content: asked });
@@ -830,8 +873,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         await say("Sorry, I can't help with that one.");
         break;
       }
+      // Căutarea pe internet a făcut o pauză: retrimitem, iar Claude continuă de unde a rămas.
+      if (data.stop_reason === "pause_turn") {
+        await speakReply();
+        continue;
+      }
       if (data.stop_reason !== "tool_use" || tools.length === 0) {
         if (raw) remember(asked, raw);
+        journal("Telefon", text, reply?.ro || raw);
         await speakReply();
         break;
       }
@@ -869,7 +918,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     }
     activeRef.current = true;
     silentRef.current = false;
-    historyRef.current = loadMemory();
+    historyRef.current = await fetchMemory();
     cleanRef.current = true;
     quietRef.current = 0;
     log("agent", GREETING.ro);

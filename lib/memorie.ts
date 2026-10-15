@@ -1,0 +1,64 @@
+import { command } from "@/lib/cereri";
+
+// Memoria lui Argus, în același Upstash Redis ca și coada: aceeași pe telefon, pe laptop și în orice browser.
+// Fapte: lucruri de ținut minte („Jess e Jessica Popescu”). Conversație: ultimele schimburi. Jurnal: tot ce s-a cerut.
+
+const FAPTE = "argus:fapte";
+const CONVERSATIE = "argus:conversatie";
+const JURNAL = "argus:jurnal";
+const FAPTE_KEEP = 100;
+const CONVERSATIE_KEEP = 24; // ultimele 12 schimburi
+const JURNAL_KEEP = 200;
+
+export type Mesaj = { role: "user" | "assistant"; content: string };
+export type Intrare = { data: string; sursa: string; cerere: string; rezultat: string };
+
+export async function listFapte(): Promise<string[]> {
+  return command<string[]>("LRANGE", FAPTE, 0, FAPTE_KEEP - 1);
+}
+
+export async function addFapt(fapt: string) {
+  await command("LREM", FAPTE, 0, fapt);
+  await command("LPUSH", FAPTE, fapt);
+  await command("LTRIM", FAPTE, 0, FAPTE_KEEP - 1);
+}
+
+export async function removeFapt(fapt: string): Promise<boolean> {
+  return (await command<number>("LREM", FAPTE, 0, fapt)) > 0;
+}
+
+export async function listConversatie(): Promise<Mesaj[]> {
+  const values = await command<string[]>("LRANGE", CONVERSATIE, 0, CONVERSATIE_KEEP - 1);
+  return values.map((value) => JSON.parse(value) as Mesaj).reverse();
+}
+
+export async function addSchimb(user: string, assistant: string) {
+  await command(
+    "LPUSH",
+    CONVERSATIE,
+    JSON.stringify({ role: "user", content: user }),
+    JSON.stringify({ role: "assistant", content: assistant }),
+  );
+  await command("LTRIM", CONVERSATIE, 0, CONVERSATIE_KEEP - 1);
+}
+
+export async function listJurnal(count = 50): Promise<Intrare[]> {
+  const values = await command<string[]>("LRANGE", JURNAL, 0, Math.min(count, JURNAL_KEEP) - 1);
+  return values.map((value) => JSON.parse(value) as Intrare);
+}
+
+export async function addIntrare(intrare: Intrare) {
+  await command("LPUSH", JURNAL, JSON.stringify(intrare));
+  await command("LTRIM", JURNAL, 0, JURNAL_KEEP - 1);
+}
+
+// Faptele și ultimele schimburi, puse la finalul instrucțiunilor lui Argus.
+export async function memoryPrompt(): Promise<string> {
+  try {
+    const fapte = await listFapte();
+    if (!fapte.length) return "";
+    return `\n\n# Ce ții minte despre Daniel (din conversațiile de dinainte)\n${fapte.map((fapt) => `- ${fapt}`).join("\n")}`;
+  } catch {
+    return "";
+  }
+}
