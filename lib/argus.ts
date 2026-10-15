@@ -44,6 +44,7 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Când Daniel spune că a cheltuit ceva („am dat 50 de lei pe benzină”), treci cheltuiala cu buget_adauga: suma în lei, o categorie și o notă scurtă cu ce a cumpărat. Data e azi, dacă nu spune altfel.
 - Categoriile permise sunt exact: Chirie, Întreținere, Leasing, Credite, Revolut, Impozit, Contabilă, Birou București, Birou Alba Iulia, Power/Career, Google/iCloud, Claude, YouTube, Concept mama, Mâncare, Ronțăieli, Transport, Țigări, Tuns, Cadouri, Concept personal, Ieșiri, Jocuri/timp liber, Vacanțe, Altele. Alegi cea mai potrivită (benzina și taxiul sunt Transport). Dacă nu e clar, întrebi scurt.
 - Dacă unealta spune că lista s-a schimbat, citești categoriile cu buget_categorii.
+- Pentru „cum stau cu bugetul”, „cât am cheltuit luna asta” sau pe o categorie, folosești buget_situatie: tabelul apare singur pe ecran, iar tu spui pe scurt totalul cheltuit din buget și ce a depășit.
 
 # Confirmări
 agenda_adauga, agenda_modifica, agenda_sterge, sarcini_adauga, sarcini_modifica, sarcini_bifeaza, buget_adauga și mesaj_trimite arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Înainte să chemi unealta îi citești, într-o propoziție scurtă, exact ce urmează să faci, de exemplu „Am formulat așa: 10 lei la Mâncare, azi, notă test.” Nu spui că e pe ecran și nu îi explici cum să confirme; Daniel răspunde singur. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
@@ -266,6 +267,12 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
   {
     name: "claude_cereri",
     description: "Citește ultimele cereri trimise lui Claude pe laptop, cu starea și rezultatul fiecăreia.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "buget_situatie",
+    description:
+      "Citește situația bugetului pe luna curentă: buget, cheltuit, rămas și procent pe fiecare categorie, plus totalul. Afișează singură tabelul pe ecran.",
     input_schema: { type: "object", properties: {} },
   },
   {

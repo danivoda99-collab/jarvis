@@ -14,6 +14,7 @@ import {
   chosenVoiceName,
   closeMic,
   englishVoices,
+  isUserTalking,
   listenOnce,
   openMic,
   primeSpeech,
@@ -366,6 +367,22 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       });
     },
     buget_categorii: () => callApi("/api/buget"),
+    // Cât s-a cheltuit luna asta pe fiecare categorie, față de buget: tabel pe ecran, rezumat cu voce.
+    buget_situatie: async () => {
+      const raw = await callApi("/api/buget?situatie=1");
+      if (raw.startsWith("Eroare")) return raw;
+      const data = JSON.parse(raw) as { luna?: string; tabel?: string[][] };
+      if (data.tabel && data.tabel.length > 1) {
+        addCard({
+          id: crypto.randomUUID(),
+          kind: "summary",
+          title: `Buget ${data.luna ?? ""}`.trim(),
+          table: data.tabel,
+          module: "buget",
+        });
+      }
+      return `${raw}\nTabelul e pe ecran. Spune pe scurt totalul și ce categorii au depășit bugetul.`;
+    },
     buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
       const amount = String(parameters.suma ?? "").trim();
       const category = asText(parameters.categorie);
@@ -583,6 +600,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
 
   // Când Claude de pe laptop cere o decizie, Argus o spune pe scurt (dacă nu vorbește deja), apoi ascultă „accept” / „refuz”.
   async function announce(title: string, text: string) {
+    if (!(await waitForSilence())) return;
     if (!activeRef.current || silentRef.current || phaseRef.current !== "listening") return;
     const decision = (text || title).slice(0, 300);
     await say(spokenLanguage() === "ro" ? `Am formulat așa: ${decision}` : `Here is how I put it: ${decision}`);
@@ -592,8 +610,17 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     }
   }
 
+  // Cât vorbește Daniel, anunțurile așteaptă (cel mult o jumătate de minut), ca să nu-i taie fraza.
+  async function waitForSilence() {
+    for (let tries = 0; tries < 60 && isUserTalking(); tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return !isUserTalking();
+  }
+
   // Rezultatul de pe laptop se spune pe scurt, dacă Argus ascultă în acel moment.
   async function report(text: string) {
+    if (!(await waitForSilence())) return;
     if (!activeRef.current || silentRef.current || phaseRef.current !== "listening" || answers.current.size > 0) return;
     await say(text);
     if (activeRef.current && (phaseRef.current as Phase) === "speaking") {
