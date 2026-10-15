@@ -67,6 +67,7 @@ Bugetul personal (Sheet „Buget personal”, id 18aCKEXM5g2cSpyjZVp8lPwnunvMEwT
 - Scrii cu update_values pe primul rând gol (nu cu append_values: inserează rânduri și strică formula din E1). Data ca =DATE(aaaa,ll,zz).
 - Categoria doar din tabul Categorii (A2:A26). Dacă nu e clară, întrebi prin CONFIRMARE.
 - Nu suprascrii rânduri existente decât dacă Daniel cere exact acel rând.
+- Când nu ești sigur (categoria, ce rând să corectezi, suma), nu scrii nimic: îi arăți rândurile relevante ca un tabel scurt (cel mult 5 rânduri) și întrebarea, prin CONFIRMARE.
 Dacă o cerere încalcă o regulă, nu o faci și explici scurt de ce.`;
 
 function loadConfig() {
