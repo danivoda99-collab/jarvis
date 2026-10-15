@@ -6,7 +6,7 @@ import { ARGUS_SYSTEM, ARGUS_TOOLS } from "@/lib/argus";
 // Un pas din conversație: aplicația trimite istoricul, Claude răspunde cu text sau cu unelte de rulat.
 // Cheia API rămâne pe server; uneltele rulează în browser, ca să poată arăta ferestre și cere confirmări.
 
-const MODEL = process.env.ARGUS_MODEL || "claude-opus-5-5";
+const MODEL = process.env.ARGUS_MODEL || "claude-sonnet-5-5";
 const MAX_HISTORY = 60;
 
 export async function POST(request: Request) {
