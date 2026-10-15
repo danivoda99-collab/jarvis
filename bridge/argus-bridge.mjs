@@ -68,6 +68,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
+9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). După „Da”, deschizi web.whatsapp.com în Chrome, cauți contactul exact, lipești textul confirmat, fără nicio schimbare, și îl trimiți. Dacă nu găsești contactul, sunt mai mulți cu același nume sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce. Altceva în Chrome nu faci.
 
 Bugetul personal (Sheet „Buget personal”, id 18aCKEXM5g2cSpyjZVp8lPwnunvMEwTdX4MJhK44OMW0):
 - O cheltuială = un rând nou în tabul Cheltuieli, coloanele A:D (Data | Sumă | Categorie | Notă). Coloana E (Luna) e o formulă, nu o atingi.
@@ -117,8 +118,12 @@ async function api(config, method, body) {
   return data;
 }
 
+// Chrome-ul de pe laptop (Claude in Chrome, cu WhatsApp Web logat) se folosește doar după „Da”, ca să trimită exact ce s-a confirmat.
+const BROWSER = "mcp__claude-in-chrome";
+
 function runClaude(config, prompt, { resume, send } = {}) {
-  const tools = send ? [...WORK_TOOLS, ...AFTER_YES_TOOLS] : WORK_TOOLS;
+  const browser = send && config.chrome !== false;
+  const tools = send ? [...WORK_TOOLS, ...AFTER_YES_TOOLS, ...(browser ? [BROWSER] : [])] : WORK_TOOLS;
   // Ce nu e în listă e refuzat, pentru că nu e nimeni lângă laptop să aprobe.
   const args = [
     "-p", "--output-format", "json", "--permission-mode", "acceptEdits",
@@ -126,6 +131,7 @@ function runClaude(config, prompt, { resume, send } = {}) {
     "--disallowedTools", (send ? BLOCKED : [...BLOCKED, ...AFTER_YES_TOOLS]).join(","),
     "--append-system-prompt", RULES,
   ];
+  if (browser) args.push("--chrome");
   if (resume) args.push("--resume", resume);
   return new Promise((resolve) => {
     const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
