@@ -345,8 +345,11 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const category = asText(parameters.categorie);
       const note = asText(parameters.nota);
       const date = asText(parameters.data);
-      const details = [`${amount} lei · ${category}`, note, date ? `Data: ${date}` : "Data: azi"].filter(Boolean).join("\n");
-      const answer = await confirm("Trec în buget?", details, undefined, "buget");
+      const table = [
+        ["Data", "Categorie", "Sumă", "Notă"],
+        [date || "azi", category, `${amount} lei`, note || "—"],
+      ];
+      const answer = await confirm("Trec în buget?", "", undefined, "buget", table);
       if (answer !== "da") return "Daniel nu a confirmat. Cheltuiala NU a fost trecută.";
       return callApi("/api/buget", "POST", { suma: amount, categorie: category, nota: note, data: date || undefined });
     },
@@ -506,13 +509,8 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   // Când Claude de pe laptop cere o decizie, Argus o spune pe scurt (dacă nu vorbește deja), apoi ascultă „accept” / „refuz”.
   async function announce(title: string, text: string) {
     if (!activeRef.current || silentRef.current || phaseRef.current !== "listening") return;
-    const decision = [title, text].filter(Boolean).join(". ").slice(0, 300);
-    const ro = spokenLanguage() === "ro";
-    await say(
-      ro
-        ? `Claude întreabă: ${decision}. Spune Argus, accept, sau Argus, refuz.`
-        : `Claude asks: ${decision}. Say Argus, accept, or Argus, refuz.`,
-    );
+    const decision = (text || title).slice(0, 300);
+    await say(spokenLanguage() === "ro" ? `Am formulat așa: ${decision}` : `Here is how I put it: ${decision}`);
     if (activeRef.current && (phaseRef.current as Phase) === "speaking") {
       setPhase("listening");
       listen();
