@@ -7,6 +7,7 @@ import CardStack, { type Answer, type Card } from "./cards";
 import Orb, { type Module, type OrbHandle } from "./orb";
 import WindowLinks from "./links";
 import { blipSound, bootSound } from "./sounds";
+import type { Cerere } from "@/lib/cereri";
 import {
   canListen,
   chooseVoice,
@@ -340,11 +341,96 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       if (answer !== "da") return "Daniel nu a confirmat. Cheltuiala NU a fost trecută.";
       return callApi("/api/buget", "POST", { suma: amount, categorie: category, nota: note, data: date || undefined });
     },
+    claude_trimite: async (parameters: { titlu?: unknown; cerere?: unknown }) => {
+      const title = asText(parameters.titlu);
+      const request = asText(parameters.cerere);
+      if (!request) return "Lipsește cererea.";
+      const answer = await confirm("Trimit lui Claude pe laptop?", title ? `${title}\n\n${request}` : request);
+      if (answer !== "da") return "Daniel nu a confirmat. Cererea NU a fost trimisă.";
+      return callApi("/api/cereri", "POST", { titlu: title, cerere: request });
+    },
+    claude_cereri: async () => {
+      const raw = await callApi("/api/cereri");
+      if (raw.startsWith("Eroare")) return raw;
+      const { cereri = [] } = JSON.parse(raw) as { cereri?: Cerere[] };
+      return JSON.stringify(
+        cereri.slice(0, 10).map((item) => ({
+          titlu: item.titlu,
+          stare: item.status,
+          trimisa: item.creat,
+          rezultat: item.rezultat?.slice(0, 600),
+        })),
+      );
+    },
     inchide_ferestrele: () => {
       setCards((previous) => previous.filter((card) => card.kind === "confirm"));
       return "Ferestrele sunt închise.";
     },
   };
+
+  // Ce a făcut Claude pe laptop: rezultatele apar ca ferestre, iar ce trebuie trimis cere „Da”.
+  const askedRef = useRef(new Set<string>());
+  useEffect(() => {
+    const SEEN_KEY = "argus-cereri-vazute";
+    let stopped = false;
+    let seen = "";
+    try {
+      seen = localStorage.getItem(SEEN_KEY) ?? new Date().toISOString();
+    } catch {
+      seen = new Date().toISOString();
+    }
+    async function poll() {
+      if (stopped || document.hidden) return;
+      let cereri: Cerere[] = [];
+      try {
+        const response = await fetch("/api/cereri", { cache: "no-store" });
+        if (response.status === 502 || response.status === 401) {
+          stopped = true; // coada nu e pornită încă
+          return;
+        }
+        if (!response.ok) return;
+        cereri = ((await response.json()) as { cereri?: Cerere[] }).cereri ?? [];
+      } catch {
+        return;
+      }
+      let latest = seen;
+      for (const item of [...cereri].reverse()) {
+        if (item.status === "așteaptă confirmare" && item.confirmare && !askedRef.current.has(item.id)) {
+          askedRef.current.add(item.id);
+          log("agent", `Claude cere confirmare: ${item.titlu}`);
+          void confirm(item.confirmare.titlu || "Confirmi?", item.confirmare.text, item.confirmare.destinatar).then((answer) => {
+            if (answer === "fără răspuns") return; // rămâne în așteptare; o revezi la următoarea deschidere
+            void fetch("/api/cereri", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: item.id, status: answer === "da" ? "confirmată" : "refuzată" }),
+            });
+          });
+        }
+        if ((item.status === "gata" || item.status === "eroare") && item.actualizat > seen) {
+          const title = item.status === "gata" ? `Claude a terminat: ${item.titlu}` : `Claude n-a reușit: ${item.titlu}`;
+          addCard({ id: crypto.randomUUID(), kind: "summary", title, text: item.rezultat || "" });
+          log("agent", title);
+        }
+        if (item.actualizat > latest) latest = item.actualizat;
+      }
+      seen = latest;
+      try {
+        localStorage.setItem(SEEN_KEY, seen);
+      } catch {
+        // fără memorare: la următoarea deschidere pot reapărea ultimele rezultate
+      }
+    }
+    void poll();
+    const timer = setInterval(poll, 20_000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [phase, setPhaseState] = useState<Phase>("idle");
   const phaseRef = useRef<Phase>("idle");
