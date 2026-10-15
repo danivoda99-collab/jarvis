@@ -33,7 +33,7 @@ export function queueReady() {
 
 export class QueueError extends Error {}
 
-async function command<T>(...args: (string | number)[]): Promise<T> {
+export async function command<T>(...args: (string | number)[]): Promise<T> {
   const config = redis();
   if (!config) throw new QueueError("Coada nu e pornită: în Vercel → Storage trebuie conectat Upstash Redis.");
   const response = await fetch(config.url, {

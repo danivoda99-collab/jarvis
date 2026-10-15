@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { ARGUS_SYSTEM, ARGUS_TOOLS, SPOKEN_ROMANIAN } from "@/lib/argus";
+import { memoryPrompt } from "@/lib/memorie";
 
 // Un pas din conversație: aplicația trimite istoricul, Claude răspunde cu text sau cu unelte de rulat.
 // Cheia API rămâne pe server; uneltele rulează în browser, ca să poată arăta ferestre și cere confirmări.
@@ -43,10 +44,12 @@ export async function POST(request: Request) {
   }
 
   const client = new Anthropic();
+  // Faptele ținute minte vin la final, ca restul instrucțiunilor să rămână în cache.
+  const memory = await memoryPrompt();
   const params: Anthropic.Beta.MessageCreateParamsNonStreaming = {
       model: MODEL,
       max_tokens: 4000,
-      system: romanian ? ARGUS_SYSTEM + SPOKEN_ROMANIAN : ARGUS_SYSTEM,
+      system: (romanian ? ARGUS_SYSTEM + SPOKEN_ROMANIAN : ARGUS_SYSTEM) + memory,
       tools: ARGUS_TOOLS,
       messages,
       // Răspunsuri vocale scurte: gândire puțină, ca să vină repede.
