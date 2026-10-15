@@ -283,6 +283,8 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const stopListenRef = useRef<() => void>(() => {});
   const listenGenRef = useRef(0); // fiecare ascultare nouă o anulează pe cea veche
   const quietRef = useRef(0);
+  const silentRef = useRef(false); // când Daniel scrie, Argus răspunde doar în scris
+  const cleanRef = useRef(true); // istoricul s-a încheiat normal și se poate continua
   const [heard, setHeard] = useState("");
   const [typed, setTyped] = useState("");
   const [voices, setVoices] = useState<string[]>([]);
@@ -315,7 +317,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   }
 
   async function say(text: string) {
-    if (!activeRef.current || !text) return;
+    if (!activeRef.current || !text || silentRef.current) return;
     stopListening();
     setPhase("speaking");
     await speak(text);
@@ -324,7 +326,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   // Ascultă cât timp conversația e pornită și Argus nu vorbește.
   // Cât e deschisă o fereastră de confirmare, ascultă doar „Argus, accept” / „Argus, refuz”.
   function listen() {
-    if (!activeRef.current || phaseRef.current === "speaking") return;
+    if (!activeRef.current || silentRef.current || phaseRef.current === "speaking") return;
     const confirming = answers.current.size > 0;
     if (!confirming && phaseRef.current === "thinking") return;
     if (!confirming) setPhase("listening");
@@ -390,7 +392,8 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     stopListening();
     setPhase("thinking");
     log("user", text);
-    if (historyRef.current.length > MAX_MESSAGES) historyRef.current = [];
+    if (historyRef.current.length > MAX_MESSAGES || !cleanRef.current) historyRef.current = [];
+    cleanRef.current = false;
     historyRef.current.push({ role: "user", content: `${nowLine()}\n${text}` });
 
     for (let step = 0; step < MAX_STEPS && activeRef.current; step += 1) {
@@ -438,18 +441,26 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const results = await Promise.all(tools.map(runTool));
       historyRef.current.push({ role: "user", content: results });
     }
-    if (activeRef.current) {
-      quietRef.current = 0;
-      setPhase("listening");
-      listen();
+    if (!activeRef.current) return;
+    cleanRef.current = historyRef.current.at(-1)?.role === "assistant";
+    if (silentRef.current) {
+      // Mod scris: fără microfon după răspuns; conversația rămâne pentru următorul mesaj.
+      activeRef.current = false;
+      setPhase("idle");
+      return;
     }
+    quietRef.current = 0;
+    setPhase("listening");
+    listen();
   }
 
   async function begin() {
     setError("");
     primeSpeech();
     activeRef.current = true;
+    silentRef.current = false;
     historyRef.current = [];
+    cleanRef.current = true;
     quietRef.current = 0;
     log("agent", GREETING.ro);
     await say(GREETING.spoken);
@@ -527,12 +538,11 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     if (!text || phaseRef.current === "thinking") return;
     setTyped("");
     setError("");
-    if (!activeRef.current) {
-      primeSpeech();
-      activeRef.current = true;
-      historyRef.current = [];
-    }
+    // Scris = răspuns doar în scris, fără voce și fără microfon (pentru când nu poți vorbi).
+    stopListening();
     stopSpeaking();
+    silentRef.current = true;
+    activeRef.current = true;
     void ask(text);
   }
 
