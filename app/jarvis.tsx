@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import Hud, { type HudState } from "./hud";
 import CardStack, { type Answer, type Card } from "./cards";
+import Orb, { type Module, type OrbHandle } from "./orb";
+import WindowLinks from "./links";
+import { blipSound, bootSound } from "./sounds";
 
 type Line = { role: "user" | "agent"; text: string; at: string };
 
@@ -71,6 +74,21 @@ function spokenAnswer(message: string): Answer | null {
 
 const CONFIRM_TIMEOUT_MS = 90_000;
 
+// Din ce modul vine o fereastră, ca să pornească din cuvântul potrivit de pe sferă.
+function guessModule(...texts: string[]): Module | undefined {
+  const text = texts.join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (/buget|cheltui|\blei\b|ron\b/.test(text)) return "buget";
+  if (/mail|inbox|gmail/.test(text)) return "gmail";
+  if (/agend|intaln|sedint|calendar|eveniment/.test(text)) return "agenda";
+  if (/sarcin|to-?do|de facut|priorit/.test(text)) return "sarcini";
+  return undefined;
+}
+
+function asModule(value: unknown): Module | undefined {
+  const text = asText(value).toLowerCase();
+  return (["agenda", "sarcini", "buget", "gmail"] as const).find((module) => module === text);
+}
+
 function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -78,6 +96,12 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
   const hudRef = useRef<HTMLButtonElement>(null);
+  const orbRef = useRef<OrbHandle>(null);
+  const levelRef = useRef(0);
+  const [use2d, setUse2d] = useState(false);
+  const [working, setWorking] = useState(0);
+  const [armed, setArmed] = useState(true);
+  const [fullscreen, setFullscreen] = useState(false);
   const meterRef = useRef<HTMLSpanElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const now = useClock();
@@ -97,6 +121,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
 
   function addCard(card: Card) {
     setCards((previous) => [...previous.filter((item) => item.kind === "confirm"), card].slice(-4));
+    blipSound();
   }
 
   function closeCard(id: string) {
@@ -110,9 +135,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   }
 
   // Afișează o fereastră Da/Nu și așteaptă atingerea lui Daniel.
-  function confirm(title: string, details: string, recipient?: string) {
+  function confirm(title: string, details: string, recipient?: string, module?: Module) {
     const id = crypto.randomUUID();
-    addCard({ id, kind: "confirm", title, details, recipient });
+    addCard({ id, kind: "confirm", title, details, recipient, module: module ?? guessModule(title, details) });
     return new Promise<Answer | "fără răspuns">((resolve) => {
       const timer = setTimeout(() => settle(id, "fără răspuns"), CONFIRM_TIMEOUT_MS);
       answers.current.set(id, (answer) => {
@@ -123,6 +148,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   }
 
   async function callApi(path: string, method = "GET", body?: unknown): Promise<string> {
+    // Cât timp Argus caută sau scrie ceva, sfera trece pe „lucrează” și scanează.
+    setWorking((count) => count + 1);
+    orbRef.current?.scan();
     try {
       const response = await fetch(path, {
         method,
@@ -135,27 +163,35 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       return data.ok && Object.keys(data).length === 1 ? "Gata, făcut." : JSON.stringify(data);
     } catch {
       return "Eroare: nu am putut ajunge la server.";
+    } finally {
+      setWorking((count) => count - 1);
     }
   }
 
   // Unelte pe care agentul ARGUS le cheamă ca să arate ferestre pe ecran.
   const clientTools = {
-    arata_rezumat: (parameters: { titlu?: unknown; text?: unknown; puncte?: unknown }) => {
+    arata_rezumat: (parameters: { titlu?: unknown; text?: unknown; puncte?: unknown; modul?: unknown }) => {
+      const title = asText(parameters.titlu) || "Rezumat";
+      const text = asText(parameters.text);
       addCard({
         id: crypto.randomUUID(),
         kind: "summary",
-        title: asText(parameters.titlu) || "Rezumat",
-        text: asText(parameters.text),
+        title,
+        text,
         points: asList(parameters.puncte),
+        module: asModule(parameters.modul) ?? guessModule(title, text),
       });
       return "Rezumatul e afișat pe ecran.";
     },
-    arata_lista: (parameters: { titlu?: unknown; elemente?: unknown }) => {
+    arata_lista: (parameters: { titlu?: unknown; elemente?: unknown; modul?: unknown }) => {
+      const title = asText(parameters.titlu) || "Listă";
+      const items = asList(parameters.elemente);
       addCard({
         id: crypto.randomUUID(),
         kind: "list",
-        title: asText(parameters.titlu) || "Listă",
-        items: asList(parameters.elemente),
+        title,
+        items,
+        module: asModule(parameters.modul) ?? guessModule(title, items.slice(0, 3).join(" ")),
       });
       return "Lista e afișată pe ecran.";
     },
@@ -182,7 +218,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const start = asText(parameters.inceput);
       const end = asText(parameters.sfarsit);
       const when = [start, end].filter(Boolean).map((value) => value.replace("T", " ")).join(" – ");
-      const answer = await confirm("Adaug în agendă?", `${title}\n${when}`);
+      const answer = await confirm("Adaug în agendă?", `${title}\n${when}`, undefined, "agenda");
       if (answer !== "da") return "Daniel nu a confirmat. Evenimentul NU a fost adăugat.";
       return callApi("/api/agenda", "POST", {
         titlu: title,
@@ -195,7 +231,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     sarcini_adauga: async (parameters: { titlu?: unknown; scadenta?: unknown; notite?: unknown }) => {
       const title = asText(parameters.titlu);
       const due = asText(parameters.scadenta);
-      const answer = await confirm("Adaug în to-do?", due ? `${title}\nScadență: ${due}` : title);
+      const answer = await confirm("Adaug în to-do?", due ? `${title}\nScadență: ${due}` : title, undefined, "sarcini");
       if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost adăugată.";
       return callApi("/api/sarcini", "POST", {
         titlu: title,
@@ -204,7 +240,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       });
     },
     sarcini_bifeaza: async (parameters: { id?: unknown; titlu?: unknown }) => {
-      const answer = await confirm("Bifez ca făcută?", asText(parameters.titlu) || "Sarcina aleasă");
+      const answer = await confirm("Bifez ca făcută?", asText(parameters.titlu) || "Sarcina aleasă", undefined, "sarcini");
       if (answer !== "da") return "Daniel nu a confirmat. Sarcina NU a fost bifată.";
       return callApi("/api/sarcini", "PATCH", { id: asText(parameters.id) });
     },
@@ -215,7 +251,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const note = asText(parameters.nota);
       const date = asText(parameters.data);
       const details = [`${amount} lei · ${category}`, note, date ? `Data: ${date}` : "Data: azi"].filter(Boolean).join("\n");
-      const answer = await confirm("Trec în buget?", details);
+      const answer = await confirm("Trec în buget?", details, undefined, "buget");
       if (answer !== "da") return "Daniel nu a confirmat. Cheltuiala NU a fost trecută.";
       return callApi("/api/buget", "POST", { suma: amount, categorie: category, nota: note, data: date || undefined });
     },
@@ -256,6 +292,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   // Nucleul și indicatorul de semnal urmăresc volumul: vocea lui ARGUS când vorbește, a ta când asculți.
   useEffect(() => {
     const setLevel = (value: number) => {
+      levelRef.current = value;
       hudRef.current?.style.setProperty("--level", value.toFixed(3));
       meterRef.current?.style.setProperty("--level", value.toFixed(3));
     };
@@ -305,6 +342,8 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     }
   }
 
+  const toggleRef = useRef(() => {});
+  toggleRef.current = toggle;
   function toggle() {
     if (connected) {
       conversation.endSession();
@@ -318,12 +357,32 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     const onKey = (event: KeyboardEvent) => {
       if (event.code === "Space" && !(event.target instanceof HTMLInputElement)) {
         event.preventDefault();
-        hudRef.current?.click();
+        toggleRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Pe laptop, ARGUS pornește cu un ecran de inițializare: un clic pornește sunetul, animația și ecranul complet.
+  useEffect(() => {
+    setArmed(!window.matchMedia("(pointer: fine)").matches);
+    const onChange = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  function powerUp() {
+    setArmed(true);
+    bootSound();
+    orbRef.current?.boot();
+    void document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => {});
+  }
 
   const hudState: HudState = busy ? "connecting" : !connected ? "idle" : isSpeaking ? "speaking" : "listening";
   const label = {
@@ -341,6 +400,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           <span className="brand-mark">A</span>
           <span className="brand-name">ARGUS</span>
         </div>
+        <button className="fullscreen" onClick={toggleFullscreen} aria-label={fullscreen ? "Ieși din ecranul complet" : "Ecran complet"}>
+          {fullscreen ? "Ieși din ecran complet" : "Ecran complet"}
+        </button>
         <div className="clock" suppressHydrationWarning>
           <span className="clock-time">{now ? timeOf(now) : "--:--"}</span>
           <span className="clock-date">
@@ -380,7 +442,19 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       </aside>
 
       <section className="center">
-        <Hud ref={hudRef} state={hudState} onToggle={toggle} label={connected ? "Oprește conversația" : "Pornește conversația"} />
+        {use2d ? (
+          <Hud ref={hudRef} state={hudState} onToggle={toggle} label={connected ? "Oprește conversația" : "Pornește conversația"} />
+        ) : (
+          <Orb
+            ref={orbRef}
+            state={working > 0 && (hudState === "idle" || hudState === "listening") ? "working" : hudState}
+            active={cards.flatMap((card) => (card.module ? [card.module] : []))}
+            getLevel={() => levelRef.current}
+            onTap={toggle}
+            label={connected ? "Oprește conversația" : "Pornește conversația"}
+            onUnsupported={() => setUse2d(true)}
+          />
+        )}
         <p className="status">{label}</p>
         {connected && <p className="hint">Atinge din nou ca să închizi.</p>}
         {error && <p className="error">{error}</p>}
@@ -406,6 +480,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       </aside>
 
       <CardStack cards={cards} onClose={closeCard} onAnswer={settle} />
+      {!use2d && <WindowLinks cards={cards} orb={orbRef} />}
+
+      {!armed && (
+        <button className="power" onClick={powerUp}>
+          <span className="power-title">ARGUS</span>
+          <span className="power-hint">Clic pentru inițializare</span>
+        </button>
+      )}
     </main>
   );
 }
