@@ -450,6 +450,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [voices, setVoices] = useState<string[]>([]);
   const [voiceName, setVoiceName] = useState("");
   const [language, setLanguage] = useState<Language>("en");
+  const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
   useEffect(() => setLanguage(spokenLanguage()), []);
 
   function setPhase(next: Phase) {
@@ -806,6 +807,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           <span className="brand-mark">A</span>
           <span className="brand-name">ARGUS</span>
         </div>
+        <button className="settings-toggle" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen}>
+          {settingsOpen ? "Închide" : "Setări"}
+        </button>
         <button className="fullscreen" onClick={toggleFullscreen} aria-label={fullscreen ? "Ieși din ecranul complet" : "Ecran complet"}>
           {fullscreen ? "Ieși din ecran complet" : "Ecran complet"}
         </button>
@@ -817,7 +821,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         </div>
       </header>
 
-      <aside className="panel panel-left">
+      <aside className={`panel panel-left${settingsOpen ? " open" : ""}`}>
         <h2 className="panel-title">Sistem</h2>
         <dl className="readout">
           <div>
