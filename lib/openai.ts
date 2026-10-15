@@ -14,6 +14,10 @@ export const TTS_STYLE =
   process.env.OPENAI_TTS_STYLE ||
   "Voice: a refined British AI butler, like JARVIS. Calm, warm and confident, with a light touch of dry wit. Natural pace, crisp diction, never robotic.";
 
+export const TTS_STYLE_RO =
+  process.env.OPENAI_TTS_STYLE_RO ||
+  "Speak Romanian with a natural, native Romanian accent and correct Romanian pronunciation. Voice: a refined AI butler, like JARVIS. Calm, warm and confident, with a light touch of dry wit. Natural pace, never robotic.";
+
 export function openaiKey(): string | null {
   return process.env.OPENAI_API_KEY || null;
 }

@@ -19,8 +19,11 @@ import {
   primeSpeech,
   setCloudVoice,
   speak,
+  chooseLanguage,
+  spokenLanguage,
   splitReply,
   stopSpeaking,
+  type Language,
 } from "./voice";
 
 type Line = { role: "user" | "agent"; text: string; at: string };
@@ -41,6 +44,7 @@ const GREETING = {
   spoken: "Hello Daniel, Argus online. What are we breaking today?",
   ro: "Salut, Daniel! Argus e aici. Cu ce rupem topurile azi?",
 };
+const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
@@ -445,6 +449,8 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [typed, setTyped] = useState("");
   const [voices, setVoices] = useState<string[]>([]);
   const [voiceName, setVoiceName] = useState("");
+  const [language, setLanguage] = useState<Language>("en");
+  useEffect(() => setLanguage(spokenLanguage()), []);
 
   function setPhase(next: Phase) {
     phaseRef.current = next;
@@ -584,7 +590,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: historyRef.current }),
+          body: JSON.stringify({ messages: historyRef.current, limba: spokenLanguage() }),
           cache: "no-store",
         });
         if (response.status === 401) {
@@ -654,7 +660,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     cleanRef.current = true;
     quietRef.current = 0;
     log("agent", GREETING.ro);
-    await say(GREETING.spoken);
+    await say(spokenLanguage() === "ro" ? GREETING.ro : GREETING.spoken);
     if (activeRef.current) {
       setPhase("listening");
       listen();
@@ -742,7 +748,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     chooseVoice(name);
     setVoiceName(name);
     primeSpeech();
-    void speak("Voice check. Argus online.");
+    void speak(VOICE_CHECK[spokenLanguage()]);
+  }
+
+  function pickLanguage(next: Language) {
+    chooseLanguage(next);
+    setLanguage(next);
+    primeSpeech();
+    void speak(VOICE_CHECK[next]);
   }
 
   // Pe desktop, Space pornește și oprește conversația.
@@ -815,6 +828,15 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
             <dt>Semnal</dt>
             <dd>
               <span ref={meterRef} className="meter" />
+            </dd>
+          </div>
+          <div>
+            <dt>Limbă</dt>
+            <dd>
+              <select id="language" className="voice" value={language} onChange={(event) => pickLanguage(event.target.value as Language)} aria-label="Limba în care vorbește Argus">
+                <option value="en">Engleză</option>
+                <option value="ro">Română</option>
+              </select>
             </dd>
           </div>
           <div>
