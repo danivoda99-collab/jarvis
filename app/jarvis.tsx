@@ -46,6 +46,32 @@ const GREETING = {
 };
 const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
+
+// Ce s-a vorbit rămâne pe telefon (doar textul, fără unelte), ca Argus să continue de unde ați rămas.
+const MEMORY_KEY = "argus-memorie";
+const MEMORY_KEEP = 24; // ultimele 12 schimburi
+function loadMemory(): Message[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MEMORY_KEY) ?? "[]") as { role: "user" | "assistant"; content: string }[];
+    const messages = saved.filter((item) => typeof item.content === "string" && item.content);
+    while (messages.length && messages[0].role !== "user") messages.shift();
+    return messages.at(-1)?.role === "assistant" ? messages : [];
+  } catch {
+    return [];
+  }
+}
+function remember(user: string, assistant: string) {
+  try {
+    const messages = [
+      ...loadMemory(),
+      { role: "user", content: user },
+      { role: "assistant", content: assistant },
+    ].slice(-MEMORY_KEEP);
+    localStorage.setItem(MEMORY_KEY, JSON.stringify(messages));
+  } catch {
+    // fără memorare, următoarea conversație începe de la zero
+  }
+}
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
 
@@ -662,9 +688,10 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     stopListening();
     setPhase("thinking");
     log("user", text);
-    if (historyRef.current.length > MAX_MESSAGES || !cleanRef.current) historyRef.current = [];
+    if (historyRef.current.length > MAX_MESSAGES || !cleanRef.current) historyRef.current = loadMemory();
     cleanRef.current = false;
-    historyRef.current.push({ role: "user", content: `${nowLine()}\n${text}` });
+    const asked = `${nowLine()}\n${text}`;
+    historyRef.current.push({ role: "user", content: asked });
 
     for (let step = 0; step < MAX_STEPS && activeRef.current; step += 1) {
       let data: { content?: Anthropic.Beta.BetaContentBlock[]; stop_reason?: string; error?: string };
@@ -701,6 +728,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         break;
       }
       if (data.stop_reason !== "tool_use" || tools.length === 0) {
+        if (raw) remember(asked, raw);
         if (reply) await say(reply.spoken);
         break;
       }
@@ -738,7 +766,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     }
     activeRef.current = true;
     silentRef.current = false;
-    historyRef.current = [];
+    historyRef.current = loadMemory();
     cleanRef.current = true;
     quietRef.current = 0;
     log("agent", GREETING.ro);
