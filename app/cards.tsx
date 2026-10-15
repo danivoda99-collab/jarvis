@@ -7,7 +7,7 @@ import type { Module } from "./orb";
 export type Card = { module?: Module } & (
   | { id: string; kind: "summary"; title: string; text?: string; points?: string[] }
   | { id: string; kind: "list"; title: string; items: string[] }
-  | { id: string; kind: "confirm"; title: string; details: string; recipient?: string }
+  | { id: string; kind: "confirm"; title: string; details: string; recipient?: string; table?: string[][] }
 );
 
 export type Answer = "da" | "nu";
@@ -106,7 +106,29 @@ export default function CardStack({
                   {card.recipient}
                 </p>
               )}
-              <p className="card-details">{card.details}</p>
+              {card.details && <p className="card-details">{card.details}</p>}
+              {card.table && card.table.length > 1 && (
+                <div className="card-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        {card.table[0].map((cell, index) => (
+                          <th key={index}>{cell}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {card.table.slice(1).map((row, rowIndex) => (
+                        <tr key={rowIndex}>
+                          {row.map((cell, index) => (
+                            <td key={index}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <p className="card-hint">Spune „Argus, accept” sau „Argus, refuz”.</p>
               <div className="card-actions">
                 <button className="card-no" onClick={() => onAnswer(card.id, "nu")}>

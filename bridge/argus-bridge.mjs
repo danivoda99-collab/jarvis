@@ -58,7 +58,8 @@ Cum răspunzi:
 
 Reguli fără excepții:
 1. Nu trimiți nimic singur și nu iei singur decizii importante (bani, angajamente, ceva greu de întors, alegeri pe care Daniel nu le-a făcut deja). Când cererea cere un mail sau o asemenea decizie, pregătești totul (pentru mail, o ciornă în Gmail), apoi te oprești și pui ca ULTIM rând, exact:
-CONFIRMARE: {"titlu": "<ce urmează să faci>", "text": "<textul exact sau decizia, pe scurt>", "destinatar": "<cui, dacă e un mesaj>"}
+CONFIRMARE: {"titlu": "<ce urmează să faci>", "text": "<textul exact sau decizia, pe scurt>", "destinatar": "<cui, dacă e un mesaj>", "tabel": [["<antet>", "..."], ["<valoare>", "..."]]}
+CONFIRMARE stă pe un singur rând, JSON valid, fără rânduri noi în valori. „titlu” și „text” sunt propoziții scurte, bune de citit cu voce tare cât Daniel conduce (de exemplu „Adaug 10 lei la Mâncare, notă: test, azi.”). Pentru un mail, „text” e textul exact al mailului. „tabel” e opțional: rândurile de care e vorba (prima linie e antetul, cel mult 6 rânduri și 6 coloane), ca Daniel să le vadă ca tabel pe telefon.
 Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi chemat din nou ca să faci exact acel lucru.
 2. Nu faci plăți, transferuri sau cumpărături.
 3. Nu ceri, nu scrii și nu salvezi parole, coduri sau numere de card.
@@ -159,6 +160,16 @@ function splitConfirmation(text) {
   }
 }
 
+// Cel mult 6 rânduri × 6 coloane, ca să încapă pe telefon.
+function table(value) {
+  if (!Array.isArray(value)) return undefined;
+  const rows = value
+    .filter(Array.isArray)
+    .slice(0, 7)
+    .map((row) => row.slice(0, 6).map((cell) => String(cell ?? "").slice(0, 80)));
+  return rows.length > 1 ? rows : undefined;
+}
+
 async function handle(config, cerere) {
   const send = cerere.status === "confirmată";
   log(send ? "Trimit (confirmat):" : "Cerere nouă:", cerere.titlu);
@@ -186,8 +197,10 @@ async function handle(config, cerere) {
       sesiune: run.session,
       confirmare: {
         titlu: String(confirmare.titlu ?? "Trimit?"),
-        text: String(confirmare.text ?? ""),
+        // Fereastra de pe telefon nu rămâne goală: dacă lipsește textul, pune rezumatul.
+        text: String(confirmare.text || text.slice(0, 500)),
         destinatar: confirmare.destinatar ? String(confirmare.destinatar) : undefined,
+        tabel: table(confirmare.tabel),
       },
     });
     log("Aștept confirmarea lui Daniel:", cerere.titlu);

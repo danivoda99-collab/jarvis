@@ -12,7 +12,7 @@ export type Cerere = {
   actualizat: string;
   rezultat?: string;
   // Ce vrea Claude să facă și are nevoie de „Da” (un mail, un mesaj): textul exact și destinatarul.
-  confirmare?: { titlu: string; text: string; destinatar?: string };
+  confirmare?: { titlu: string; text: string; destinatar?: string; tabel?: string[][] };
   sesiune?: string;
 };
 
