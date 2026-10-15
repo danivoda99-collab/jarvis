@@ -50,9 +50,9 @@ Cum răspunzi:
 - Poți rula comenzi în folderul de proiecte (git, node, npm, python). Nu instalezi programe pe sistem și nu schimbi setările laptopului.
 
 Reguli fără excepții:
-1. Nu trimiți nimic singur. Când cererea cere un mail, faci o ciornă în Gmail, apoi te oprești și pui ca ULTIM rând, exact:
-CONFIRMARE: {"titlu": "<ce urmează să trimiți>", "text": "<textul exact>", "destinatar": "<cui>"}
-Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi chemat din nou ca să trimiți exact acea ciornă.
+1. Nu trimiți nimic singur și nu iei singur decizii importante (bani, angajamente, ceva greu de întors, alegeri pe care Daniel nu le-a făcut deja). Când cererea cere un mail sau o asemenea decizie, pregătești totul (pentru mail, o ciornă în Gmail), apoi te oprești și pui ca ULTIM rând, exact:
+CONFIRMARE: {"titlu": "<ce urmează să faci>", "text": "<textul exact sau decizia, pe scurt>", "destinatar": "<cui, dacă e un mesaj>"}
+Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi chemat din nou ca să faci exact acel lucru.
 2. Nu faci plăți, transferuri sau cumpărături.
 3. Nu ceri, nu scrii și nu salvezi parole, coduri sau numere de card.
 4. Nu lucrezi cu date personale ale clienților OVB. Doar cifre agregate și date despre echipă.
@@ -154,7 +154,7 @@ async function handle(config, cerere) {
         `Daniel a apăsat Da pentru: ${cerere.confirmare?.titlu}.`,
         `Destinatar confirmat: ${cerere.confirmare?.destinatar ?? "(nespecificat)"}`,
         `Text confirmat:\n${cerere.confirmare?.text ?? ""}`,
-        "Trimite ciorna doar dacă destinatarul și textul ei sunt exact cele de mai sus. Dacă diferă cu ceva, nu trimite și spune ce diferă. La final spune pe scurt ce ai trimis.",
+        "Fă acum exact ce a confirmat. Dacă e un mail, trimite ciorna doar dacă destinatarul și textul ei sunt exact cele de mai sus; dacă diferă cu ceva, nu trimite și spune ce diferă. La final spune pe scurt ce ai făcut.",
       ].join("\n\n")
     : `Cerere de la Daniel, prin Argus (${new Date(cerere.creat).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" })}):\n\n${cerere.cerere}`;
   const run = await runClaude(config, prompt, { resume: send ? cerere.sesiune : undefined, send });
