@@ -1,7 +1,7 @@
 // Puntea Argus → laptop: preia cererile trimise din aplicația Argus și le dă lui Claude Code de pe laptop.
-// Varianta „pas cu pas”: Claude citește, caută și scrie fișiere în folderul de proiecte; nu rulează comenzi
-// și nu trimite nimic. Un mail sau un mesaj pleacă doar după ce Daniel apasă Da pe telefon, într-un pas separat
-// în care singura unealtă de trimitere permisă e cea pentru textul confirmat.
+// Varianta „liber, cu limite” (aleasă de Daniel pe 15.10.2026): Claude citește, caută, scrie fișiere și rulează
+// comenzi singur în folderul de proiecte. Nu trimite nimic: un mail pleacă doar după ce Daniel apasă Da pe
+// telefon, într-un pas separat în care abia atunci primește unealta de trimitere. Ștergerile sunt blocate.
 // Pornire: node argus-bridge.mjs (prima dată cere codul aplicației).
 
 import { spawn } from "node:child_process";
@@ -16,9 +16,9 @@ const CONFIG_FILE = join(HERE, "config.json");
 const POLL_MS = 15_000;
 const RUN_TIMEOUT_MS = 15 * 60_000;
 
-// Ce poate face Claude singur: doar citit, căutat, scris în folderul de proiecte și ciorne.
+// Ce poate face Claude singur: citit, căutat, scris, comenzi, ciorne.
 const WORK_TOOLS = [
-  "Read", "Glob", "Grep", "Write", "Edit", "WebSearch", "WebFetch",
+  "Read", "Glob", "Grep", "Write", "Edit", "WebSearch", "WebFetch", "Bash",
   "mcp__claude_ai_Gmail__search_threads", "mcp__claude_ai_Gmail__get_thread", "mcp__claude_ai_Gmail__get_message",
   "mcp__claude_ai_Gmail__create_draft", "mcp__claude_ai_Gmail__update_draft",
   "mcp__claude_ai_Google_Calendar__list_events", "mcp__claude_ai_Google_Drive__search_files",
@@ -26,6 +26,14 @@ const WORK_TOOLS = [
 ];
 // După „Da”: aceleași unelte plus trimiterea ciornei confirmate.
 const SEND_TOOLS = ["mcp__claude_ai_Gmail__send_draft", "mcp__claude_ai_Gmail__send_message"];
+// Limitele: comenzi care șterg, trimit în afară sau schimbă sistemul sunt refuzate mereu.
+const BLOCKED = [
+  "Bash(rm:*)", "Bash(rmdir:*)", "Bash(del:*)", "Bash(erase:*)", "Bash(rd:*)", "Bash(Remove-Item:*)",
+  "Bash(format:*)", "Bash(diskpart:*)", "Bash(shutdown:*)", "Bash(reg:*)", "Bash(git push --force:*)",
+  "Bash(git push -f:*)", "Bash(git reset --hard:*)", "Bash(git clean:*)", "Bash(curl:*)", "Bash(Invoke-WebRequest:*)",
+  "mcp__claude_ai_Gmail__trash_message", "mcp__claude_ai_Gmail__trash_thread", "mcp__claude_ai_Google_Drive__trash_file",
+  "mcp__claude_ai_Google_Calendar__delete_event",
+];
 
 const DEFAULTS = {
   url: "https://jarvis-one-psi-36.vercel.app",
@@ -39,7 +47,7 @@ Daniel nu e lângă laptop: rezultatul tău îi apare pe telefon, într-o fereas
 Cum răspunzi:
 - În română, cu diacritice. La final, un rezumat scurt de cel mult 10 rânduri: ce ai făcut și ce a ieșit.
 - Fișierele pentru proiecte le ții în folderul curent, câte un subfolder pe proiect. Nu scrii în afara lui.
-- Nu ai voie să rulezi comenzi. Dacă cererea are nevoie de asta, spui ce ar trebui rulat și de ce.
+- Poți rula comenzi în folderul de proiecte (git, node, npm, python). Nu instalezi programe pe sistem și nu schimbi setările laptopului.
 
 Reguli fără excepții:
 1. Nu trimiți nimic singur. Când cererea cere un mail, faci o ciornă în Gmail, apoi te oprești și pui ca ULTIM rând, exact:
@@ -94,8 +102,13 @@ async function api(config, method, body) {
 
 function runClaude(config, prompt, { resume, send } = {}) {
   const tools = send ? [...WORK_TOOLS, ...SEND_TOOLS] : WORK_TOOLS;
-  // Mod implicit: orice unealtă care nu e în listă e refuzată, pentru că nu e nimeni să aprobe.
-  const args = ["-p", "--output-format", "json", "--permission-mode", "default", "--allowedTools", tools.join(","), "--append-system-prompt", RULES];
+  // Ce nu e în listă e refuzat, pentru că nu e nimeni lângă laptop să aprobe.
+  const args = [
+    "-p", "--output-format", "json", "--permission-mode", "acceptEdits",
+    "--allowedTools", tools.join(","),
+    "--disallowedTools", (send ? BLOCKED : [...BLOCKED, ...SEND_TOOLS]).join(","),
+    "--append-system-prompt", RULES,
+  ];
   if (resume) args.push("--resume", resume);
   return new Promise((resolve) => {
     const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });

@@ -2,7 +2,7 @@
 
 Programul mic care stă pe laptopul lui Argus, preia cererile trimise din aplicație („zi-i lui Claude să…”) și le dă lui Claude Code. Rezultatul apare în aplicație ca fereastră; un mail pleacă doar după ce Daniel apasă Da pe telefon.
 
-Ce poate Claude prin punte: citește și caută (web, Gmail, Drive, Calendar), scrie fișiere în `proiecte`, face ciorne de mail. Nu rulează comenzi și nu trimite nimic fără „Da”.
+Ce poate Claude prin punte (varianta „liber, cu limite”): citește și caută (web, Gmail, Drive, Calendar), scrie fișiere și rulează comenzi în `proiecte`, face ciorne de mail. Nu trimite nimic fără „Da” și nu are voie la comenzi care șterg sau schimbă sistemul (lista `BLOCKED` din `argus-bridge.mjs`).
 
 ## Instalare (o singură dată)
 
