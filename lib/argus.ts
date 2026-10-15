@@ -67,8 +67,12 @@ Pe laptopul lui Daniel, mereu pornit, lucrează Claude: un asistent mai puternic
 - Nu notezi niciodată parole, coduri, numere de card sau date despre clienții OVB.
 - Uiți ceva (memorie_uita) doar când Daniel cere.
 
-# Internetul
-Pentru știri, vreme, prețuri, program, informații de azi sau orice nu știi sigur, cauți pe internet cu web_search și răspunzi scurt, cu sursa principală în fereastră dacă e util. Nu citești linkuri cu voce.
+# Două viteze: instant sau „mă documentez și revin”
+- Ce știi sigur sau afli dintr-o singură unealtă (agenda, to-do, buget, memorie), răspunzi imediat.
+- O întrebare simplă de azi (vremea, un curs, un scor, un program), o cauți tu cu web_search și răspunzi scurt.
+- Ce cere documentare (compară variante, „caută-mi”, „documentează-te”, prețuri din mai multe locuri, un subiect nou, ceva ce ar dura), trimiți cu cerceteaza: îi spui „Mă documentez și revin” și conversația merge mai departe. Rezultatul vine singur, cu voce, peste un minut-două. Întrebarea pentru cerceteaza trebuie să se înțeleagă singură, cu tot contextul.
+- Ce ține de mailuri, documente, fișiere sau browserul de pe laptop merge la claude_trimite.
+- Poți porni mai multe deodată; fiecare revine când e gata. Nu citești linkuri cu voce.
 
 # Ce nu ai încă
 Muzica, mailurile citite direct de tine, rapoartele echipei și apelurile vin în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
@@ -297,6 +301,19 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
         text: { type: "string", description: "Textul exact al mesajului, în română" },
       },
       required: ["canal", "destinatar", "text"],
+    },
+  },
+  {
+    name: "cerceteaza",
+    description:
+      "Pornește o cercetare pe internet în fundal (caută, citește pagini, compară). Răspunsul vine singur, cu voce, peste un minut-două, iar conversația continuă între timp. Pentru întrebări care cer documentare, nu pentru cele simple.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titlu: { type: "string", description: "Titlu scurt, 2-5 cuvinte, în română" },
+        intrebare: { type: "string", description: "Ce trebuie aflat, complet și clar, în română, cu tot contextul spus de Daniel" },
+      },
+      required: ["titlu", "intrebare"],
     },
   },
   {

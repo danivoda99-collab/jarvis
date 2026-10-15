@@ -484,6 +484,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       window.dispatchEvent(new Event("argus-cerere"));
       return result.startsWith("Eroare") ? result : "Trimis la laptop; Daniel aude când pleacă mesajul.";
     },
+    // „Mă documentez și revin”: caută pe server, în fundal; rezultatul vine singur, cu voce.
+    cerceteaza: async (parameters: { titlu?: unknown; intrebare?: unknown }) => {
+      const question = asText(parameters.intrebare);
+      if (!question) return "Lipsește întrebarea.";
+      const result = await callApi("/api/cercetare", "POST", { titlu: asText(parameters.titlu), intrebare: question });
+      window.dispatchEvent(new Event("argus-cerere"));
+      return result.startsWith("Eroare") ? result : "Cercetarea a pornit în fundal. Rezultatul vine singur, cu voce. Continuă conversația.";
+    },
     claude_cereri: async () => {
       const raw = await callApi("/api/cereri");
       if (raw.startsWith("Eroare")) return raw;
@@ -570,10 +578,19 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           const title = item.status === "gata" ? `Claude a terminat: ${item.titlu}` : `Claude n-a reușit: ${item.titlu}`;
           addCard({ id: crypto.randomUUID(), kind: "summary", title, text: item.rezultat || "" });
           log("agent", title);
-          // Prima propoziție din rezultat („Trimis lui Jess pe WhatsApp.”) se spune cu voce.
-          const first = (item.rezultat || "").split(/(?<=[.!?])\s|\n/)[0]?.slice(0, 200) || title;
+          // Prima propoziție din rezultat („Trimis lui Jess pe WhatsApp.”) se spune cu voce;
+          // la o cercetare, tot primul paragraf, care e răspunsul.
+          const research = item.titlu.startsWith("Cercetare:");
+          const first =
+            (research
+              ? (item.rezultat || "").split(/\n\s*\n|\n- /)[0]?.slice(0, 500)
+              : (item.rezultat || "").split(/(?<=[.!?])\s|\n/)[0]?.slice(0, 200)) || title;
           void report(item.status === "gata" ? first : `Claude n-a reușit: ${first}`);
-          journal("Laptop", item.cerere, `${item.status === "gata" ? "" : "Eroare: "}${item.rezultat || ""}`);
+          journal(research ? "Cercetare" : "Laptop", item.cerere, `${item.status === "gata" ? "" : "Eroare: "}${item.rezultat || ""}`);
+          // Argus ține minte ce a găsit, ca Daniel să poată întreba mai departe.
+          if (research && item.status === "gata" && item.rezultat) {
+            remember(`(Cercetarea cerută: ${item.cerere})`, item.rezultat.slice(0, 2000));
+          }
         }
         if (item.actualizat > latest) latest = item.actualizat;
       }
@@ -683,6 +700,10 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
 
   // Rezultatul de pe laptop se spune pe scurt, dacă Argus ascultă în acel moment.
   async function report(text: string) {
+    // Dacă Argus tocmai vorbește sau se gândește, rezultatul așteaptă rândul (cel mult un minut).
+    for (let tries = 0; tries < 120 && activeRef.current && phaseRef.current !== "listening"; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (!(await waitForSilence())) return;
     if (!activeRef.current || silentRef.current || phaseRef.current !== "listening" || answers.current.size > 0) return;
     await say(text);
