@@ -686,3 +686,10 @@ body {
   border-color: rgba(212, 166, 74, 0.2);
   color: var(--ivory-muted);
 }
+
+.card-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  opacity: 0.6;
+}

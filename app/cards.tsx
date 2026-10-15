@@ -70,6 +70,7 @@ export default function CardStack({
                 </p>
               )}
               <p className="card-details">{card.details}</p>
+              <p className="card-hint">Spune „Argus, accept” sau „Argus, refuz”.</p>
               <div className="card-actions">
                 <button className="card-no" onClick={() => onAnswer(card.id, "nu")}>
                   Nu

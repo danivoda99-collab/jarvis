@@ -60,8 +60,11 @@ function spokenAnswer(message: string): Answer | null {
     .replace(/[^a-z\s]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
+  // „Argus, accept” / „Argus, refuz” sunt frazele clare; numele poate fi auzit și „Argos” sau lipsi.
+  if (words[0]?.startsWith("arg")) words.shift();
   if (words.length === 0 || words.length > 4) return null;
-  if (words.includes("nu") || words.includes("anuleaza")) return "nu";
+  if (words.some((word) => ["nu", "anuleaza", "refuz", "refuza"].includes(word))) return "nu";
+  if (["accept", "accepta", "accepte"].includes(words[0])) return "da";
   if (words[0] === "da" || (words[0] === "confirm" && words.length === 1)) return "da";
   return null;
 }
