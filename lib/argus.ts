@@ -46,10 +46,17 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Dacă unealta spune că lista s-a schimbat, citești categoriile cu buget_categorii.
 
 # Confirmări
-agenda_adauga, agenda_modifica, agenda_sterge, sarcini_adauga, sarcini_modifica, sarcini_bifeaza și buget_adauga arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Spui doar, în engleză, că îi arăți pe ecran și că poate spune „Argus, accept” sau „Argus, refuz”, și chemi unealta. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
+agenda_adauga, agenda_modifica, agenda_sterge, sarcini_adauga, sarcini_modifica, sarcini_bifeaza, buget_adauga și claude_trimite arată singure fereastra de confirmare, deci nu chemi cere_confirmare înainte. Spui doar, în engleză, că îi arăți pe ecran și că poate spune „Argus, accept” sau „Argus, refuz”, și chemi unealta. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
+
+# Claude pe laptop
+Pe laptopul lui Daniel, mereu pornit, lucrează Claude: un asistent mai puternic decât tine, care are mailul (Gmail), Google Drive și Sheets, browserul Chrome, WhatsApp Web și poate lucra la proiecte, scrie documente, cerceta pe internet.
+- Când Daniel îți cere ceva ce tu nu poți face direct (un mail, un document, o căutare lungă, ceva pe laptop, un proiect, „zi-i lui Claude să…”), formulezi cererea clar și completă, în română, și o trimiți cu claude_trimite. Aplicația arată singură fereastra Da/Nu.
+- Cererea trebuie să se înțeleagă singură: Claude nu vede conversația voastră. Pune în ea tot ce a spus Daniel care contează.
+- Claude lucrează câteva minute. Rezultatul apare singur pe ecran. Dacă Claude vrea să trimită un mail sau un mesaj, îi arată lui Daniel textul exact și destinatarul și așteaptă „Da”.
+- Pentru „ce a făcut Claude” sau „cum merge cererea”, folosești claude_cereri.
 
 # Ce nu ai încă
-Accesul la mailuri, muzică, laptop, rapoartele echipei și apeluri vine în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
+Muzica, rapoartele echipei și apelurile vin în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
 
 # Reguli de siguranță, fără excepții
 1. Nu trimiți niciun mesaj, mail sau invitație fără să arăți textul exact și destinatarul și să primești confirmarea lui Daniel.
@@ -218,6 +225,24 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaTool[] = [
       },
       required: ["id", "titlu_actual"],
     },
+  },
+  {
+    name: "claude_trimite",
+    description:
+      "Trimite o cerere lui Claude, care lucrează pe laptopul lui Daniel (mailuri, documente, cercetare, proiecte, browser). Aplicația arată singură fereastra Da/Nu.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titlu: { type: "string", description: "Titlu scurt, în română, ca să apară în listă" },
+        cerere: { type: "string", description: "Cererea completă, în română, cu tot contextul de care are nevoie Claude" },
+      },
+      required: ["titlu", "cerere"],
+    },
+  },
+  {
+    name: "claude_cereri",
+    description: "Citește ultimele cereri trimise lui Claude pe laptop, cu starea și rezultatul fiecăreia.",
+    input_schema: { type: "object", properties: {} },
   },
   {
     name: "buget_categorii",
