@@ -165,12 +165,17 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     answers.current.get(id)?.(answer);
     answers.current.delete(id);
     closeCard(id);
+    // Ce a prins microfonul cât era deschisă fereastra nu e o cerere nouă: îl aruncăm și ascultăm din nou.
+    if (activeRef.current && phaseRef.current === "listening") {
+      stopListening();
+      setTimeout(listen, 150);
+    }
   }
 
   // Afișează o fereastră Da/Nu și așteaptă atingerea lui Daniel.
-  function confirm(title: string, details: string, recipient?: string, module?: Module) {
+  function confirm(title: string, details: string, recipient?: string, module?: Module, table?: string[][]) {
     const id = crypto.randomUUID();
-    addCard({ id, kind: "confirm", title, details, recipient, module: module ?? guessModule(title, details) });
+    addCard({ id, kind: "confirm", title, details, recipient, table, module: module ?? guessModule(title, details) });
     return new Promise<Answer | "fără răspuns">((resolve) => {
       const timer = setTimeout(() => settle(id, "fără răspuns"), CONFIRM_TIMEOUT_MS);
       answers.current.set(id, (answer) => {
@@ -402,7 +407,10 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         if (item.status === "așteaptă confirmare" && item.confirmare && !askedRef.current.has(item.id)) {
           askedRef.current.add(item.id);
           log("agent", `Claude cere confirmare: ${item.titlu}`);
-          void confirm(item.confirmare.titlu || "Confirmi?", item.confirmare.text, item.confirmare.destinatar).then((answer) => {
+          const { titlu, text, destinatar, tabel } = item.confirmare;
+          const decision = confirm(titlu || "Confirmi?", text, destinatar, undefined, tabel);
+          void announce(titlu, text);
+          void decision.then((answer) => {
             if (answer === "fără răspuns") return; // rămâne în așteptare; o revezi la următoarea deschidere
             void fetch("/api/cereri", {
               method: "PATCH",
@@ -493,6 +501,22 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   function stopListening() {
     listenGenRef.current += 1;
     stopListenRef.current();
+  }
+
+  // Când Claude de pe laptop cere o decizie, Argus o spune pe scurt (dacă nu vorbește deja), apoi ascultă „accept” / „refuz”.
+  async function announce(title: string, text: string) {
+    if (!activeRef.current || silentRef.current || phaseRef.current !== "listening") return;
+    const decision = [title, text].filter(Boolean).join(". ").slice(0, 300);
+    const ro = spokenLanguage() === "ro";
+    await say(
+      ro
+        ? `Claude întreabă: ${decision}. Spune Argus, accept, sau Argus, refuz.`
+        : `Claude asks: ${decision}. Say Argus, accept, or Argus, refuz.`,
+    );
+    if (activeRef.current && (phaseRef.current as Phase) === "speaking") {
+      setPhase("listening");
+      listen();
+    }
   }
 
   async function say(text: string) {

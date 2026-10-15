@@ -627,6 +627,38 @@ body {
   background: rgba(244, 236, 216, 0.06);
 }
 
+.card-table {
+  overflow-x: auto;
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(244, 236, 216, 0.15);
+}
+
+.card-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-table th,
+.card-table td {
+  padding: 7px 10px;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(244, 236, 216, 0.1);
+}
+
+.card-table th {
+  color: var(--gold);
+  font-weight: 600;
+  background: rgba(244, 236, 216, 0.06);
+}
+
+.card-table tr:last-child td {
+  border-bottom: none;
+}
+
 .card-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
