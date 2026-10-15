@@ -5,7 +5,7 @@
 // Pornire: node argus-bridge.mjs (prima dată cere codul aplicației).
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -27,15 +27,19 @@ const WORK_TOOLS = [
   "mcp__claude_ai_Google_Sheets__update_values", "mcp__claude_ai_Google_Sheets__append_values",
   "mcp__claude_ai_Google_Sheets__update_formulas",
 ];
-// După „Da”: aceleași unelte plus trimiterea ciornei confirmate.
-const SEND_TOOLS = ["mcp__claude_ai_Gmail__send_draft", "mcp__claude_ai_Gmail__send_message"];
-// Limitele: comenzi care șterg, trimit în afară sau schimbă sistemul sunt refuzate mereu.
-const BLOCKED = [
-  "Bash(rm:*)", "Bash(rmdir:*)", "Bash(del:*)", "Bash(erase:*)", "Bash(rd:*)", "Bash(Remove-Item:*)",
-  "Bash(format:*)", "Bash(diskpart:*)", "Bash(shutdown:*)", "Bash(reg:*)", "Bash(git push --force:*)",
-  "Bash(git push -f:*)", "Bash(git reset --hard:*)", "Bash(git clean:*)", "Bash(curl:*)", "Bash(Invoke-WebRequest:*)",
+// Doar după „Da”: trimiterea ciornei confirmate și ștergerile cerute de Daniel (Gmail, Drive și Calendar
+// le țin 30 de zile în Coș).
+const AFTER_YES_TOOLS = [
+  "mcp__claude_ai_Gmail__send_draft", "mcp__claude_ai_Gmail__send_message",
   "mcp__claude_ai_Gmail__trash_message", "mcp__claude_ai_Gmail__trash_thread", "mcp__claude_ai_Google_Drive__trash_file",
   "mcp__claude_ai_Google_Calendar__delete_event", "mcp__claude_ai_Google_Sheets__batch_clear_values",
+];
+// Limitele: comenzi care strică sistemul sau rescriu istoria sunt refuzate mereu, chiar și după „Da”.
+const BLOCKED = [
+  "Bash(format:*)", "Bash(diskpart:*)", "Bash(shutdown:*)", "Bash(reg:*)", "Bash(git push --force:*)",
+  "Bash(git push -f:*)", "Bash(git reset --hard:*)", "Bash(git clean:*)", "Bash(curl:*)", "Bash(Invoke-WebRequest:*)",
+  // Fișierele de pe laptop nu au Coș din linia de comandă, deci nu se șterg niciodată.
+  "Bash(rm:*)", "Bash(rmdir:*)", "Bash(del:*)", "Bash(erase:*)", "Bash(rd:*)", "Bash(Remove-Item:*)",
 ];
 
 const DEFAULTS = {
@@ -59,7 +63,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 2. Nu faci plăți, transferuri sau cumpărături.
 3. Nu ceri, nu scrii și nu salvezi parole, coduri sau numere de card.
 4. Nu lucrezi cu date personale ale clienților OVB. Doar cifre agregate și date despre echipă.
-5. Nu ștergi nimic.
+5. Ștergi doar când Daniel cere asta explicit, și numai după „Da”: pui CONFIRMARE cu lista exactă a ce urmează să ștergi (mailuri, fișiere, evenimente, rânduri). Preferi mereu Coșul (Gmail, Drive, Calendar), nu ștergerea definitivă. Fișierele de pe laptop nu le ștergi niciodată; dacă Daniel vrea asta, îi spui să le șteargă el.
 6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
 
 Bugetul personal (Sheet „Buget personal”, id 18aCKEXM5g2cSpyjZVp8lPwnunvMEwTdX4MJhK44OMW0):
@@ -111,12 +115,12 @@ async function api(config, method, body) {
 }
 
 function runClaude(config, prompt, { resume, send } = {}) {
-  const tools = send ? [...WORK_TOOLS, ...SEND_TOOLS] : WORK_TOOLS;
+  const tools = send ? [...WORK_TOOLS, ...AFTER_YES_TOOLS] : WORK_TOOLS;
   // Ce nu e în listă e refuzat, pentru că nu e nimeni lângă laptop să aprobe.
   const args = [
     "-p", "--output-format", "json", "--permission-mode", "acceptEdits",
     "--allowedTools", tools.join(","),
-    "--disallowedTools", (send ? BLOCKED : [...BLOCKED, ...SEND_TOOLS]).join(","),
+    "--disallowedTools", (send ? BLOCKED : [...BLOCKED, ...AFTER_YES_TOOLS]).join(","),
     "--append-system-prompt", RULES,
   ];
   if (resume) args.push("--resume", resume);
@@ -193,12 +197,31 @@ async function handle(config, cerere) {
   log("Gata:", cerere.titlu);
 }
 
+// Când fișierul ăsta e actualizat, puntea se repornește singură între două cereri, în aceeași fereastră.
+const SELF = fileURLToPath(import.meta.url);
+const STARTED_AT = statSync(SELF).mtimeMs;
+
+function updated() {
+  try {
+    return statSync(SELF).mtimeMs !== STARTED_AT;
+  } catch {
+    return false;
+  }
+}
+
+function restart() {
+  log("Puntea a fost actualizată. Repornesc.");
+  const child = spawn(process.execPath, [SELF], { stdio: "inherit", windowsHide: true });
+  child.on("exit", (code) => process.exit(code ?? 0));
+}
+
 async function main() {
   const config = loadConfig();
   mkdirSync(config.folder, { recursive: true });
   if (!config.cookie) await login(config);
   log(`Puntea Argus pornită. Verific cererile la ${POLL_MS / 1000} secunde. Folder: ${config.folder}`);
   for (;;) {
+    if (updated()) return restart();
     try {
       const { cereri = [] } = await api(config, "GET");
       // Cele mai vechi primele; una câte una.
