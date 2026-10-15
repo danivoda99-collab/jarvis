@@ -18,6 +18,8 @@ const POLL_MS = 8_000;
 const FAST_POLL_MS = 2_000;
 const FAST_FOR_MS = 5 * 60_000;
 const RUN_TIMEOUT_MS = 15 * 60_000;
+// Câte cereri lucrează deodată. Trimiterile (WhatsApp în Chrome) merg tot una câte una, ca să nu se încurce tabul.
+const PARALLEL = 3;
 
 // Ce poate face Claude singur: citit, căutat, scris, comenzi, ciorne.
 const WORK_TOOLS = [
@@ -255,23 +257,41 @@ async function main() {
   log(`Puntea Argus pornită. Verific cererile la ${POLL_MS / 1000} secunde. Folder: ${config.folder}`);
   let lastSignal = null;
   let busyUntil = 0;
+  const running = new Map(); // id → trimitere (true) sau cerere obișnuită (false)
+  const wait = () => new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
   for (;;) {
-    if (updated()) return restart();
+    // Repornirea după actualizare așteaptă să se termine ce e în lucru.
+    if (updated() && running.size === 0) return restart();
     try {
       // Întâi semnalul (o comandă); lista se citește doar când s-a schimbat ceva.
       const { semnal } = await api(config, "GET", undefined, "?semnal=1");
       if (semnal !== undefined && semnal === lastSignal) {
-        await new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
+        await wait();
         continue;
       }
       lastSignal = semnal ?? null;
       busyUntil = Date.now() + FAST_FOR_MS;
-      const { cereri = [] } = await api(config, "GET");
-      // Cele mai vechi primele; una câte una.
-      const next = [...cereri].reverse().find((item) => item.status === "nouă" || item.status === "confirmată");
-      if (next) {
-        await handle(config, next);
+      if (updated()) {
+        await wait();
         continue;
+      }
+      const { cereri = [] } = await api(config, "GET");
+      // Cele mai vechi primele; mai multe deodată, dar o singură trimitere odată.
+      for (const item of [...cereri].reverse()) {
+        if (running.size >= PARALLEL) break;
+        if (running.has(item.id) || (item.status !== "nouă" && item.status !== "confirmată")) continue;
+        const send = item.status === "confirmată";
+        if (send && [...running.values()].includes(true)) continue;
+        running.set(item.id, send);
+        handle(config, item)
+          .catch(async (error) => {
+            log("Eroare:", item.titlu, error.message);
+            await api(config, "PATCH", { id: item.id, status: "eroare", rezultat: "Puntea a dat eroare. Mai încearcă." }).catch(() => {});
+          })
+          .finally(() => {
+            running.delete(item.id);
+            lastSignal = null; // un loc liber: verificăm imediat dacă mai așteaptă ceva
+          });
       }
     } catch (error) {
       if (error.relogin) {
@@ -282,9 +302,8 @@ async function main() {
       }
       log("Nu pot verifica cererile:", error.message);
       lastSignal = null; // la următoarea verificare citim din nou toată lista, ca nimic să nu rămână neluat
-
     }
-    await new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
+    await wait();
   }
 }
 

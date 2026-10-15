@@ -72,13 +72,18 @@ export async function readSignal(): Promise<string> {
 }
 
 // Cu `confirmare`, Daniel a apăsat deja Da pe telefon (de exemplu la un mesaj), deci laptopul doar execută.
-export async function addCerere(titlu: string, text: string, confirmare?: Cerere["confirmare"]): Promise<Cerere> {
+export async function addCerere(
+  titlu: string,
+  text: string,
+  confirmare?: Cerere["confirmare"],
+  status?: Status,
+): Promise<Cerere> {
   const now = new Date().toISOString();
   const cerere: Cerere = {
     id: crypto.randomUUID(),
     titlu,
     cerere: text,
-    status: confirmare ? "confirmată" : "nouă",
+    status: status ?? (confirmare ? "confirmată" : "nouă"),
     creat: now,
     actualizat: now,
     confirmare,
