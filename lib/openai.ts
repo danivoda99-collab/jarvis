@@ -1,7 +1,8 @@
 // Vocea și auzul lui Argus prin OpenAI: transcriere în română și voce în engleză.
 // Modelele și vocea se pot schimba din Vercel fără cod nou.
 
-export const OPENAI_VOICES = ["ash", "onyx", "echo", "fable", "ballad", "verse", "sage", "alloy"];
+// marin și cedar sunt cele mai noi și mai naturale; restul rămân de încercat.
+export const OPENAI_VOICES = ["cedar", "marin", "ash", "echo", "onyx", "ballad", "verse", "sage", "fable", "alloy", "coral", "nova", "shimmer"];
 
 export const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
 export const TTS_MODEL = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
