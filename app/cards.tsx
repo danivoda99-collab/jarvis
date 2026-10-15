@@ -1,9 +1,14 @@
 "use client";
 
-export type Card =
+import { useEffect, useState } from "react";
+import type { Module } from "./orb";
+
+// `module` leagă fereastra de cuvântul ei de pe sferă (AGENDA, SARCINI, BUGET, GMAIL).
+export type Card = { module?: Module } & (
   | { id: string; kind: "summary"; title: string; text?: string; points?: string[] }
   | { id: string; kind: "list"; title: string; items: string[] }
-  | { id: string; kind: "confirm"; title: string; details: string; recipient?: string };
+  | { id: string; kind: "confirm"; title: string; details: string; recipient?: string }
+);
 
 export type Answer = "da" | "nu";
 
@@ -12,6 +17,32 @@ const KIND_LABEL: Record<Card["kind"], string> = {
   list: "Listă",
   confirm: "Confirmare",
 };
+
+const MODULE_LABEL: Record<Module, string> = { agenda: "Agenda", sarcini: "Sarcini", buget: "Buget", gmail: "Gmail" };
+
+// Titlul se scrie literă cu literă, după ce fereastra s-a deschis.
+function Typed({ text }: { text: string }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(text.length);
+      return;
+    }
+    let count = 0;
+    let timer = window.setTimeout(function step() {
+      count += 1;
+      setShown(count);
+      if (count < text.length) timer = window.setTimeout(step, 16);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [text]);
+  return (
+    <>
+      {text.slice(0, shown)}
+      {shown < text.length && <span className="caret" aria-hidden="true" />}
+    </>
+  );
+}
 
 export default function CardStack({
   cards,
@@ -26,16 +57,22 @@ export default function CardStack({
   return (
     <div className="cards" aria-live="polite">
       {cards.map((card) => (
-        <article key={card.id} className={`card card-${card.kind}`}>
+        <article key={card.id} className={`card card-${card.kind}`} data-card-id={card.id} aria-label={card.title}>
+          <span className="corner corner-a" aria-hidden="true" />
+          <span className="corner corner-b" aria-hidden="true" />
           <header className="card-head">
-            <span className="card-kind">{KIND_LABEL[card.kind]}</span>
+            <span className="card-kind">
+              {card.module ? `${MODULE_LABEL[card.module]} · ${KIND_LABEL[card.kind]}` : KIND_LABEL[card.kind]}
+            </span>
             {card.kind !== "confirm" && (
               <button className="card-close" onClick={() => onClose(card.id)} aria-label="Închide">
                 ×
               </button>
             )}
           </header>
-          <h3 className="card-title">{card.title}</h3>
+          <h3 className="card-title">
+            <Typed text={card.title} />
+          </h3>
 
           {card.kind === "summary" && (
             <>

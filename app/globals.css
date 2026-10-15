@@ -693,3 +693,245 @@ body {
   letter-spacing: 0.02em;
   opacity: 0.6;
 }
+
+/* ---------- Sfera 3D ---------- */
+
+.orb {
+  position: relative;
+  width: min(86vw, 380px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  outline: none;
+  border-radius: 50%;
+}
+
+.orb:focus-visible {
+  box-shadow: 0 0 0 2px var(--flame);
+}
+
+.orb-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  /* Marginea pătratului se topește în fundal */
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 58%, transparent 71%);
+}
+
+.orb-name {
+  position: relative;
+  pointer-events: none;
+  font-weight: 700;
+  letter-spacing: 0.5em;
+  padding-left: 0.5em;
+  font-size: clamp(14px, 3.6vw, 22px);
+  color: var(--ivory);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.85), 0 0 2px #000;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.orb-name-on {
+  opacity: 1;
+}
+
+@media (min-width: 960px) {
+  .orb {
+    width: min(68vh, 640px);
+  }
+}
+
+/* ---------- Ferestre în stil HUD: linia se întinde, fereastra se deschide, titlul se scrie ---------- */
+
+.card {
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(30, 20, 14, 0.94), rgba(14, 11, 10, 0.94));
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: win-open 0.42s 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  overflow: hidden;
+}
+
+.card::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  width: auto;
+  height: 1px;
+  animation: win-line 0.42s 0.32s ease-out both;
+  pointer-events: none;
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(255, 106, 19, 0.18) 48%, transparent 52%);
+  background-size: 100% 260%;
+  animation: win-sheen 1.1s 0.67s ease-out both;
+}
+
+.card .corner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--flame);
+  border-style: solid;
+}
+
+.card .corner-a {
+  left: 4px;
+  top: 4px;
+  border-width: 2px 0 0 2px;
+}
+
+.card .corner-b {
+  right: 4px;
+  bottom: 4px;
+  border-width: 0 2px 2px 0;
+}
+
+.card-title .caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--flame);
+  animation: blink 0.6s steps(1) infinite;
+}
+
+.card-items li,
+.card-points li {
+  animation: row-in 0.35s ease-out both;
+}
+
+.card-items li:nth-child(1), .card-points li:nth-child(1) { animation-delay: 0.78s; }
+.card-items li:nth-child(2), .card-points li:nth-child(2) { animation-delay: 0.87s; }
+.card-items li:nth-child(3), .card-points li:nth-child(3) { animation-delay: 0.96s; }
+.card-items li:nth-child(4), .card-points li:nth-child(4) { animation-delay: 1.05s; }
+.card-items li:nth-child(n + 5), .card-points li:nth-child(n + 5) { animation-delay: 1.14s; }
+
+@keyframes win-open {
+  0% { clip-path: inset(50% 0 50% 0); opacity: 0.2; }
+  35% { clip-path: inset(50% 0 50% 0); opacity: 1; }
+  100% { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+}
+
+@keyframes win-line {
+  0% { transform: scaleX(0); opacity: 1; }
+  35% { transform: scaleX(1); opacity: 1; }
+  60%, 100% { opacity: 0; }
+}
+
+@keyframes win-sheen {
+  from { background-position: 0 100%; }
+  to { background-position: 0 -60%; }
+}
+
+@keyframes row-in {
+  from { opacity: 0; transform: translateX(-8px); }
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.links {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.links path {
+  fill: none;
+  stroke: var(--flame);
+  stroke-width: 1.25;
+  stroke-opacity: 0.85;
+  filter: drop-shadow(0 0 3px var(--flame));
+}
+
+.links circle {
+  fill: var(--flame);
+  filter: drop-shadow(0 0 4px var(--flame));
+}
+
+.spark {
+  position: fixed;
+  z-index: 11;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: #ffd9a8;
+  box-shadow: 0 0 12px 4px var(--flame), 0 0 30px 8px rgba(255, 106, 19, 0.5);
+}
+
+/* ---------- Ecran complet și inițializare ---------- */
+
+.topbar .fullscreen {
+  margin-left: auto;
+  margin-right: 20px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ivory-muted);
+  background: none;
+  border: 1px solid rgba(212, 166, 74, 0.25);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .topbar .fullscreen {
+    display: none;
+  }
+}
+
+.power {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: none;
+  cursor: pointer;
+  color: var(--gold);
+  background: radial-gradient(60% 50% at 50% 50%, rgba(255, 106, 19, 0.12), transparent 70%), var(--black);
+}
+
+.power-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.6em;
+  padding-left: 0.6em;
+}
+
+.power-hint {
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ivory-muted);
+  animation: blink 1.6s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card::before,
+  .card::after,
+  .card-items li,
+  .card-points li {
+    animation: none;
+  }
+}
