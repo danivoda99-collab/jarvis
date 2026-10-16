@@ -492,6 +492,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       window.dispatchEvent(new Event("argus-cerere"));
       return result.startsWith("Eroare") ? result : "Cercetarea a pornit în fundal. Rezultatul vine singur, cu voce. Continuă conversația.";
     },
+    jurnal_citeste: () => callApi("/api/jurnal"),
     claude_cereri: async () => {
       const raw = await callApi("/api/cereri");
       if (raw.startsWith("Eroare")) return raw;
@@ -633,6 +634,55 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [voices, setVoices] = useState<string[]>([]);
   const [voiceName, setVoiceName] = useState("");
   const [language, setLanguage] = useState<Language>("en");
+  // „La volan”: răspunsuri foarte scurte, totul cu vocea, nimic de citit.
+  const [driving, setDriving] = useState(false);
+  const drivingRef = useRef(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("argus-volan") === "1";
+      drivingRef.current = saved;
+      setDriving(saved);
+    } catch {
+      // implicit oprit
+    }
+  }, []);
+  function toggleDriving() {
+    const next = !drivingRef.current;
+    drivingRef.current = next;
+    setDriving(next);
+    try {
+      localStorage.setItem("argus-volan", next ? "1" : "0");
+    } catch {
+      // rămâne doar pentru sesiunea asta
+    }
+  }
+  // O poză (bon, document, ceva de recunoscut), micșorată pe telefon ca să plece repede.
+  const photoRef = useRef<HTMLInputElement>(null);
+  async function sendPhoto(file: File) {
+    if (phaseRef.current === "thinking") return;
+    setError("");
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL("image/jpeg", 0.82).split(",")[1];
+      if (!data) throw new Error("fără imagine");
+      const text = typed.trim() || "Uite poza asta. Dacă e un bon, trece-l în buget; dacă e un document, spune-mi pe scurt ce scrie.";
+      setTyped("");
+      if (!activeRef.current) {
+        // Fără conversație pornită, răspunsul vine în scris, ca la mesajele scrise.
+        stopSpeaking();
+        silentRef.current = true;
+        activeRef.current = true;
+      }
+      void ask(text, data);
+    } catch {
+      setError("Nu am putut citi poza. Mai încearcă.");
+    }
+  }
   const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
   // Notificările: „off” = se pot porni, „on” = pornite, „denied” = refuzate, „none” = telefonul nu le suportă aici
   // (pe iPhone merg doar din aplicația pusă pe ecranul principal).
@@ -831,15 +881,23 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   }
 
   // O cerere a lui Daniel: Claude răspunde, cheamă unelte (ferestre, agendă, buget), apoi vorbește.
-  async function ask(text: string) {
+  async function ask(text: string, image?: string) {
     if (!activeRef.current) return;
     stopListening();
     setPhase("thinking");
-    log("user", text);
+    log("user", image ? `📷 ${text}` : text);
     if (historyRef.current.length > MAX_MESSAGES || !cleanRef.current) historyRef.current = await fetchMemory();
     cleanRef.current = false;
     const asked = `${nowLine()}\n${text}`;
-    historyRef.current.push({ role: "user", content: asked });
+    historyRef.current.push({
+      role: "user",
+      content: image
+        ? [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image } },
+            { type: "text", text: asked },
+          ]
+        : asked,
+    });
 
     for (let step = 0; step < MAX_STEPS && activeRef.current; step += 1) {
       let data: { content?: Anthropic.Beta.BetaContentBlock[]; stop_reason?: string; error?: string };
@@ -864,7 +922,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: historyRef.current, limba: spokenLanguage(), flux: true }),
+          body: JSON.stringify({ messages: historyRef.current, limba: spokenLanguage(), flux: true, volan: drivingRef.current }),
           cache: "no-store",
         });
         if (response.status === 401) {
@@ -951,6 +1009,16 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     }
     if (!activeRef.current) return;
     cleanRef.current = historyRef.current.at(-1)?.role === "assistant";
+    // Poza a fost văzută; în istoric rămâne doar o notă, ca următoarele cereri să plece repede.
+    if (image) {
+      for (const message of historyRef.current) {
+        if (Array.isArray(message.content)) {
+          message.content = message.content.map((block) =>
+            block.type === "image" ? { type: "text" as const, text: "[Poza trimisă de Daniel mai devreme]" } : block,
+          );
+        }
+      }
+    }
     if (silentRef.current) {
       // Mod scris: fără microfon după răspuns; conversația rămâne pentru următorul mesaj.
       activeRef.current = false;
@@ -1154,6 +1222,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
             </dd>
           </div>
           <div>
+            <dt>La volan</dt>
+            <dd>
+              <button type="button" className="voice" onClick={toggleDriving} aria-pressed={driving}>
+                {driving ? "Pornit" : "Oprit"}
+              </button>
+            </dd>
+          </div>
+          <div>
             <dt>Limbă</dt>
             <dd>
               <select id="language" className="voice" value={language} onChange={(event) => pickLanguage(event.target.value as Language)} aria-label="Limba în care vorbește Argus">
@@ -1222,9 +1298,23 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
             aria-label="Scrie-i lui Argus"
             autoComplete="off"
           />
+          <button type="button" onClick={() => photoRef.current?.click()} aria-label="Trimite o poză lui Argus">
+            Poză
+          </button>
           <button type="submit" disabled={!typed.trim()}>
             Trimite
           </button>
+          <input
+            ref={photoRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void sendPhoto(file);
+            }}
+          />
         </form>
         {error && <p className="error">{error}</p>}
         {googleNotice && <p className="hint">{googleNotice}</p>}

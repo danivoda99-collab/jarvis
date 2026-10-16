@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { ARGUS_SYSTEM, ARGUS_TOOLS, SPOKEN_ROMANIAN } from "@/lib/argus";
+import { ARGUS_SYSTEM, ARGUS_TOOLS, DRIVING, SPOKEN_ROMANIAN } from "@/lib/argus";
 import { memoryPrompt } from "@/lib/memorie";
 
 // Un pas din conversație: aplicația trimite istoricul, Claude răspunde cu text sau cu unelte de rulat.
@@ -31,11 +31,13 @@ export async function POST(request: Request) {
   let messages: Anthropic.Beta.BetaMessageParam[];
   let romanian = false;
   let wantsStream = false;
+  let driving = false;
   try {
-    const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[]; limba?: string; flux?: boolean };
+    const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[]; limba?: string; flux?: boolean; volan?: boolean };
     messages = Array.isArray(body.messages) ? body.messages : [];
     romanian = body.limba === "ro";
     wantsStream = body.flux === true;
+    driving = body.volan === true;
   } catch {
     return NextResponse.json({ error: "Cerere invalidă." }, { status: 400 });
   }
@@ -49,7 +51,7 @@ export async function POST(request: Request) {
   const params: Anthropic.Beta.MessageCreateParamsNonStreaming = {
       model: MODEL,
       max_tokens: 4000,
-      system: (romanian ? ARGUS_SYSTEM + SPOKEN_ROMANIAN : ARGUS_SYSTEM) + memory,
+      system: (romanian ? ARGUS_SYSTEM + SPOKEN_ROMANIAN : ARGUS_SYSTEM) + (driving ? DRIVING : "") + memory,
       tools: ARGUS_TOOLS,
       messages,
       // Răspunsuri vocale scurte: gândire puțină, ca să vină repede.
