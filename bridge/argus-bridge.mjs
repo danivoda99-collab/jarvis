@@ -57,6 +57,8 @@ const DEFAULTS = {
 const RULES = `Lucrezi pe laptopul lui Daniel și primești cereri de la Argus, asistentul lui vocal.
 Daniel nu e lângă laptop: rezultatul tău îi apare pe telefon, într-o fereastră mică.
 
+Memoria ta: în folderul curent sunt memorie.md (cine e Daniel, cum îi place să lucreze, oamenii cu numele corecte, limitele) și contacte.md. Le citești la începutul fiecărei cereri. Când afli ceva durabil (o preferință, o persoană, un nume scris corect), adaugi pe scurt în memorie.md. Fără date despre clienți OVB, parole sau coduri.
+
 Cum răspunzi:
 - În română, cu diacritice. La final, un rezumat scurt de cel mult 10 rânduri: ce ai făcut și ce a ieșit.
 - Fișierele pentru proiecte le ții în folderul curent, câte un subfolder pe proiect. Nu scrii în afara lui.
@@ -168,6 +170,106 @@ function runClaude(config, prompt, { resume, send } = {}) {
   });
 }
 
+// Claude „mereu treaz”: câteva procese care rămân pornite și primesc cererile pe rând (stream-json),
+// ca să nu se mai piardă ~6 secunde la pornirea lui Claude la fiecare cerere. Doar pentru etapa de lucru;
+// trimiterile după „Da” pornesc separat, cu unealta de trimitere și Chrome.
+const LANE_MAX_RUNS = 15; // după atâtea cereri, procesul se reîmprospătează (contextul crește)
+const LANE_IDLE_MS = 20 * 60_000; // un proces nefolosit atâta timp se oprește (primul rămâne mereu)
+const lanes = [];
+
+function spawnLane(config) {
+  const args = [
+    "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+    "--permission-mode", "acceptEdits",
+    "--allowedTools", WORK_TOOLS.join(","),
+    "--disallowedTools", [...BLOCKED, ...AFTER_YES_TOOLS].join(","),
+    "--append-system-prompt", RULES,
+  ];
+  if (config.model) args.push("--model", config.model);
+  const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
+  const lane = { child, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null };
+  const fail = (text) => {
+    lane.dead = true;
+    const done = lane.done;
+    lane.done = null;
+    done?.({ ok: false, text, warmFailed: true });
+  };
+  child.stdout.on("data", (chunk) => {
+    lane.buffer += chunk;
+    const lines = lane.buffer.split("\n");
+    lane.buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      let event;
+      try {
+        event = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (event.type === "result" && lane.done) {
+        const done = lane.done;
+        lane.done = null;
+        done({ ok: !event.is_error, text: String(event.result ?? ""), session: event.session_id });
+      }
+    }
+  });
+  child.stderr.on("data", () => {});
+  child.on("error", (error) => fail(`Nu pot porni Claude Code: ${error.message}`));
+  child.on("close", () => fail("Claude Code s-a oprit fără răspuns."));
+  lanes.push(lane);
+  return lane;
+}
+
+function retireLane(lane) {
+  lane.dead = true;
+  lanes.splice(lanes.indexOf(lane), 1);
+  try {
+    lane.child.stdin.end();
+    lane.child.kill();
+  } catch {
+    // deja oprit
+  }
+}
+
+// Oprește procesele în plus care stau degeaba; primul rămâne treaz.
+function trimLanes() {
+  for (const lane of [...lanes].slice(1)) {
+    if (!lane.busy && Date.now() - lane.used > LANE_IDLE_MS) retireLane(lane);
+  }
+}
+
+async function runWarm(config, prompt) {
+  if (config.treaz === false) return runClaude(config, prompt);
+  for (const lane of [...lanes]) if (lane.dead) retireLane(lane);
+  const lane = lanes.find((item) => !item.busy) ?? spawnLane(config);
+  lane.busy = true;
+  lane.runs += 1;
+  lane.used = Date.now();
+  const result = await new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      lane.done = null;
+      resolve({ ok: false, text: "Cererea a durat prea mult și am oprit-o." });
+      retireLane(lane);
+    }, RUN_TIMEOUT_MS);
+    lane.done = (value) => {
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const content = `Cerere nouă, independentă de cele de dinainte din această sesiune.\n\n${prompt}`;
+    try {
+      lane.child.stdin.write(`${JSON.stringify({ type: "user", message: { role: "user", content } })}\n`);
+    } catch {
+      lane.done?.({ ok: false, text: "", warmFailed: true });
+    }
+  });
+  lane.busy = false;
+  lane.used = Date.now();
+  if (lane.dead || lane.runs >= LANE_MAX_RUNS) {
+    if (lanes.includes(lane)) retireLane(lane);
+  }
+  // Dacă procesul treaz a căzut, cererea se reface o dată cu pornire normală.
+  return result.warmFailed ? runClaude(config, prompt) : result;
+}
+
 // Ultimul rând „CONFIRMARE: {...}” înseamnă că Claude vrea să trimită ceva și așteaptă „Da”.
 function splitConfirmation(text) {
   const match = text.match(/\n?CONFIRMARE:\s*(\{[\s\S]*\})\s*$/);
@@ -206,7 +308,9 @@ async function handle(config, cerere) {
         "Fă acum exact ce a confirmat. Dacă e un mail și ai pregătit o ciornă, o trimiți doar dacă destinatarul și textul ei sunt exact cele de mai sus; dacă diferă cu ceva, nu trimiți și spui ce diferă. Dacă nu există ciornă, trimiți mailul cu exact textul confirmat. La final spune pe scurt ce ai făcut.",
       ].join("\n\n")
     : `Cerere de la Daniel, prin Argus (${new Date(cerere.creat).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" })}):\n\n${cerere.cerere}`;
-  const run = await runClaude(config, prompt, { resume: send ? cerere.sesiune : undefined, send });
+  const memory = await knownFacts(config);
+  const full = memory ? `${memory}\n\n${prompt}` : prompt;
+  const run = send ? await runClaude(config, full, { resume: cerere.sesiune, send }) : await runWarm(config, full);
   if (!run.ok) {
     await api(config, "PATCH", { id: cerere.id, status: "eroare", rezultat: run.text || "Ceva n-a mers." });
     log("Eroare:", cerere.titlu);
@@ -252,6 +356,7 @@ const RESTART_CODE = 75;
 
 function restart() {
   log("Puntea a fost actualizată. Repornesc.");
+  for (const lane of [...lanes]) retireLane(lane);
   process.exit(RESTART_CODE);
 }
 
@@ -353,6 +458,31 @@ async function prepareMeetings(config) {
   }
 }
 
+// Ce știe Argus de pe telefon (faptele din memoria comună), pus la începutul fiecărei cereri.
+let factsCache = { at: 0, text: "" };
+async function knownFacts(config) {
+  if (Date.now() - factsCache.at < 5 * 60_000) return factsCache.text;
+  try {
+    const { fapte = [] } = await api(config, "GET", undefined, "", "/api/memorie");
+    factsCache = { at: Date.now(), text: fapte.length ? `Ce știe Argus despre Daniel:\n${fapte.slice(0, 60).map((fapt) => `- ${fapt}`).join("\n")}` : "" };
+  } catch {
+    factsCache.at = Date.now();
+  }
+  return factsCache.text;
+}
+
+// memorie.md de pe laptop ajunge și la Argus pe telefon (cel mult 4 KB), când se schimbă.
+const MEMORY_FILE = "memorie.md";
+let memorySent = 0;
+async function shareMemory(config) {
+  const file = join(config.folder, MEMORY_FILE);
+  if (!existsSync(file)) return;
+  const changed = statSync(file).mtimeMs;
+  if (changed === memorySent) return;
+  await api(config, "POST", { laptop: readFileSync(file, "utf8").slice(0, 4000) }, "", "/api/memorie");
+  memorySent = changed;
+}
+
 let chores = false;
 let choresAt = 0;
 function runChores(config) {
@@ -360,6 +490,8 @@ function runChores(config) {
   chores = true;
   choresAt = Date.now();
   (async () => {
+    trimLanes();
+    await shareMemory(config).catch(() => {});
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);
   })()
