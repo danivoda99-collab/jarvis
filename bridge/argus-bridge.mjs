@@ -76,7 +76,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
-9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, în Chrome, în tabul web.whatsapp.com (îl deschizi dacă lipsește): scrii numele în căutare, verifici o singură dată cu textul paginii care e contactul, deschizi conversația, scrii textul confirmat, fără nicio schimbare, și apeși Enter. Lucrezi repede: folosești căutarea și textul paginii, nu capturi de ecran, decât dacă altfel nu merge. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
+9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, lucrezi cât mai repede, cu cât mai puțini pași: (1) folosești tabul web.whatsapp.com deja deschis; nu navighezi și nu reîncarci pagina dacă există (îl deschizi doar dacă lipsește); (2) fără „find”: apeși Ctrl+Alt+/ (căutarea din WhatsApp Web) sau dai click o dată pe căutare, scrii exact numele din confirmare, aștepți o secundă și apeși Enter ca să deschizi primul rezultat; (3) un singur get_page_text ca să verifici că antetul conversației e exact numele confirmat (dacă nu e, nu trimiți și spui de ce); (4) scrii textul confirmat, fără nicio schimbare, și apeși Enter; (5) fără capturi de ecran: verifici cu get_page_text că ultimul mesaj e cel trimis. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
 10. Mail către un nume: cauți adresa în mailurile anterioare, cu aceeași toleranță la nume auzite greșit ca la WhatsApp. Dacă nu e sigură, nu trimiți și spui de ce.
 11. După ce ai trimis, rezumatul începe cu o propoziție scurtă, bună de citit cu voce: de exemplu „Trimis lui Jess pe WhatsApp.”
 
@@ -160,7 +160,8 @@ function runClaude(config, prompt, { resume, send } = {}) {
     "--append-system-prompt", RULES,
   ];
   if (browser) args.push("--chrome");
-  if (config.model) args.push("--model", config.model);
+  const model = send ? (config.modelTrimitere ?? "haiku") || config.model : config.model;
+  if (model) args.push("--model", model);
   if (resume) args.push("--resume", resume);
   return new Promise((resolve) => {
     const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
@@ -205,7 +206,9 @@ function spawnLane(config, send = false) {
     "--append-system-prompt", RULES,
   ];
   if (browser) args.push("--chrome");
-  if (config.model) args.push("--model", config.model);
+  // Trimiterea e pași simpli în Chrome, deci merge implicit pe modelul rapid; config.modelTrimitere "" o readuce pe modelul obișnuit.
+  const model = send ? (config.modelTrimitere ?? "haiku") || config.model : config.model;
+  if (model) args.push("--model", model);
   const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
   const lane = { child, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null, err: "" };
   const fail = (text) => {
