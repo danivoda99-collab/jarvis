@@ -57,7 +57,7 @@ const DEFAULTS = {
 const RULES = `Lucrezi pe laptopul lui Daniel și primești cereri de la Argus, asistentul lui vocal.
 Daniel nu e lângă laptop: rezultatul tău îi apare pe telefon, într-o fereastră mică.
 
-Memoria ta: în folderul curent sunt memorie.md (cine e Daniel, cum îi place să lucreze, oamenii cu numele corecte, limitele) și contacte.md. Le citești la începutul fiecărei cereri. Când afli ceva durabil (o preferință, o persoană, un nume scris corect), adaugi pe scurt în memorie.md. Fără date despre clienți OVB, parole sau coduri.
+Memoria ta: în folderul curent sunt memorie.md (cine e Daniel, cum îi place să lucreze, oamenii cu numele corecte, limitele) și contacte.md. Le citești la începutul fiecărei cereri, în afară de trimiterile deja confirmate (acolo numele și textul sunt deja stabilite, deci treci direct la trimitere). Când afli ceva durabil (o preferință, o persoană, un nume scris corect), adaugi pe scurt în memorie.md. Fără date despre clienți OVB, parole sau coduri.
 
 Cum răspunzi:
 - În română, cu diacritice. La final, un rezumat scurt de cel mult 10 rânduri: ce ai făcut și ce a ieșit.
@@ -76,7 +76,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
-9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, lucrezi cât mai repede, cu cât mai puțini pași: (1) folosești tabul web.whatsapp.com deja deschis; nu navighezi și nu reîncarci pagina dacă există (îl deschizi doar dacă lipsește); (2) fără „find”: apeși Ctrl+Alt+/ (căutarea din WhatsApp Web) sau dai click o dată pe căutare, scrii exact numele din confirmare, aștepți o secundă și apeși Enter ca să deschizi primul rezultat; (3) un singur get_page_text ca să verifici că antetul conversației e exact numele confirmat (dacă nu e, nu trimiți și spui de ce); (4) scrii textul confirmat, fără nicio schimbare, și apeși Enter; (5) fără capturi de ecran: verifici cu get_page_text că ultimul mesaj e cel trimis. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
+9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, lucrezi cât mai repede, cu cât mai puțini pași: (1) folosești tabul tău web.whatsapp.com, deja încărcat (îl deschizi doar dacă lipsește); nu navighezi, nu reîncarci și NU închizi niciodată acest tab, ca următoarea trimitere să-l găsească gata; (2) doar cu tastatura, fără „find”, fără capturi și fără click după coordonate: apeși Ctrl+Alt+/ (căutarea din WhatsApp Web), scrii exact numele din confirmare, aștepți o secundă și apeși Enter ca să deschizi primul rezultat; mesajul îl scrii direct, cursorul e deja în caseta de mesaj; (3) un singur get_page_text ca să verifici că antetul conversației e exact numele confirmat (dacă nu e, nu trimiți și spui de ce); (4) scrii textul confirmat, fără nicio schimbare, și apeși Enter; (5) fără capturi de ecran: verifici cu get_page_text că ultimul mesaj e cel trimis. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
 10. Mail către un nume: cauți adresa în mailurile anterioare, cu aceeași toleranță la nume auzite greșit ca la WhatsApp. Dacă nu e sigură, nu trimiți și spui de ce.
 11. După ce ai trimis, rezumatul începe cu o propoziție scurtă, bună de citit cu voce: de exemplu „Trimis lui Jess pe WhatsApp.”
 
@@ -209,7 +209,9 @@ function spawnLane(config, send = false) {
   // Trimiterea e pași simpli în Chrome, deci merge implicit pe modelul rapid; config.modelTrimitere "" o readuce pe modelul obișnuit.
   const model = send ? (config.modelTrimitere ?? "haiku") || config.model : config.model;
   if (model) args.push("--model", model);
-  const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
+  // La trimitere, uneltele Chrome se încarcă de la început, fără căutarea lor la fiecare cerere.
+  const env = send ? { ...process.env, ENABLE_TOOL_SEARCH: "false" } : process.env;
+  const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true, env });
   const lane = { child, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null, err: "" };
   const fail = (text) => {
     lane.dead = true;
@@ -248,9 +250,18 @@ function spawnLane(config, send = false) {
 // Primește doar cereri confirmate de Daniel.
 let sendLane = null;
 
+const SEND_PREP =
+  "Pregătire, nu e o trimitere: deschide web.whatsapp.com în tabul tău și așteaptă să se încarce lista de chaturi. Nu deschide niciun chat, nu scrie nimic și nu închide tabul. Răspunde doar «gata».";
+
 function warmSendLane(config) {
   if (config.treaz === false || (sendLane && !sendLane.dead)) return;
   sendLane = spawnLane(config, true);
+  // WhatsApp Web se încarcă de acum, ca după „Da” să fie deja deschis.
+  if (config.chrome !== false) {
+    void runWarm(config, SEND_PREP, { send: true, prep: true }).then((result) =>
+      log(result.ok ? "WhatsApp Web pregătit pentru trimiteri." : `Pregătirea WhatsApp n-a mers: ${result.text.slice(0, 200)}`),
+    );
+  }
 }
 
 // Ținut mereu treaz: confirmările făcute direct în aplicație ajung aici fără etapa de pregătire.
@@ -282,10 +293,14 @@ function trimLanes() {
   }
 }
 
-async function runWarm(config, prompt, { send, resume } = {}) {
+async function runWarm(config, prompt, { send, resume, prep } = {}) {
   if (config.treaz === false) return runClaude(config, prompt, { send, resume });
   let lane;
   if (send) {
+    // Dacă tocmai își încarcă WhatsApp-ul, așteptăm să termine (e mai repede decât o pornire de la zero).
+    for (let tries = 0; tries < 120 && sendLane?.busy && !sendLane.dead; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (!sendLane || sendLane.dead || sendLane.busy) {
       if (sendLane?.busy) return runClaude(config, prompt, { send, resume });
       sendLane = spawnLane(config, true);
@@ -319,6 +334,7 @@ async function runWarm(config, prompt, { send, resume } = {}) {
   lane.used = Date.now();
   if (lane.dead || lane.runs >= LANE_MAX_RUNS) retireLane(lane);
   // Dacă procesul treaz a căzut, cererea se reface o dată cu pornire normală.
+  if (result.warmFailed && prep) return { ok: false, text: result.text || "procesul s-a oprit" };
   return result.warmFailed ? runClaude(config, prompt, { send, resume }) : result;
 }
 
