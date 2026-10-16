@@ -132,7 +132,7 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
     type: "web_search_20250305",
     name: "web_search",
     max_uses: 3,
-    user_location: { type: "approximate", country: "RO", city: "Alba Iulia", timezone: "Europe/Bucharest" },
+    user_location: { type: "approximate", city: "Alba Iulia", timezone: "Europe/Bucharest" },
   },
   {
     name: "memorie_noteaza",
