@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { QueueError } from "@/lib/cereri";
-import { addFapt, addSchimb, listConversatie, listFapte, removeFapt, saveLaptopMemory } from "@/lib/memorie";
+import { addFapt, addSchimb, listConversatie, listFapte, memoryPrompt, removeFapt, saveLaptopMemory } from "@/lib/memorie";
 
 // Memoria comună: faptele de ținut minte și ultimele schimburi din conversație.
 
@@ -18,8 +18,8 @@ export async function GET() {
   const denied = await guard();
   if (denied) return denied;
   try {
-    const [fapte, conversatie] = await Promise.all([listFapte(), listConversatie()]);
-    return NextResponse.json({ fapte, conversatie }, { headers: { "Cache-Control": "no-store" } });
+    const [fapte, conversatie, prompt] = await Promise.all([listFapte(), listConversatie(), memoryPrompt()]);
+    return NextResponse.json({ fapte, conversatie, prompt }, { headers: { "Cache-Control": "no-store" } });
   } catch (caught) {
     return failure(caught);
   }
