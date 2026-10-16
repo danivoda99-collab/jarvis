@@ -100,14 +100,14 @@ function saveConfig(config) {
   writeFileSync(CONFIG_FILE, JSON.stringify({ ...saved, url, folder, claude, cookie }, null, 2));
 }
 
-// Jurnalul punții: pe ecran și în bridge.log (cel vechi se păstrează ca bridge.old.log peste 1 MB).
-const LOG_FILE = join(HERE, "bridge.log");
+// Jurnalul punții: pe ecran și în argus.log (cel vechi se păstrează ca argus.old.log peste 1 MB). Nu bridge.log: pe acela îl ține ocupat pornirea ascunsă.
+const LOG_FILE = join(HERE, "argus.log");
 const log = (...parts) => {
   const line = [new Date().toLocaleString("ro-RO"), ...parts].join(" ");
   // Pornită ascuns, ieșirea e deja trimisă în fișier; o scriem pe ecran doar când e o fereastră.
   if (process.stdout.isTTY) console.log(line);
   try {
-    if (existsSync(LOG_FILE) && statSync(LOG_FILE).size > 1_000_000) renameSync(LOG_FILE, join(HERE, "bridge.old.log"));
+    if (existsSync(LOG_FILE) && statSync(LOG_FILE).size > 1_000_000) renameSync(LOG_FILE, join(HERE, "argus.old.log"));
   } catch {
     // fișierul poate fi ținut deschis de altcineva; continuăm în el
   }
