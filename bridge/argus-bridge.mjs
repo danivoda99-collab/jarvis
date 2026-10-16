@@ -104,9 +104,14 @@ function saveConfig(config) {
 const LOG_FILE = join(HERE, "bridge.log");
 const log = (...parts) => {
   const line = [new Date().toLocaleString("ro-RO"), ...parts].join(" ");
-  console.log(line);
+  // Pornită ascuns, ieșirea e deja trimisă în fișier; o scriem pe ecran doar când e o fereastră.
+  if (process.stdout.isTTY) console.log(line);
   try {
     if (existsSync(LOG_FILE) && statSync(LOG_FILE).size > 1_000_000) renameSync(LOG_FILE, join(HERE, "bridge.old.log"));
+  } catch {
+    // fișierul poate fi ținut deschis de altcineva; continuăm în el
+  }
+  try {
     appendFileSync(LOG_FILE, line + "\n");
   } catch {
     // jurnalul nu are voie să oprească puntea
