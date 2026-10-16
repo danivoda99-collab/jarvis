@@ -5,7 +5,7 @@
 // Pornire: node argus-bridge.mjs (prima dată cere codul aplicației).
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -100,7 +100,18 @@ function saveConfig(config) {
   writeFileSync(CONFIG_FILE, JSON.stringify({ ...saved, url, folder, claude, cookie }, null, 2));
 }
 
-const log = (...parts) => console.log(new Date().toLocaleString("ro-RO"), ...parts);
+// Jurnalul punții: pe ecran și în bridge.log (cel vechi se păstrează ca bridge.old.log peste 1 MB).
+const LOG_FILE = join(HERE, "bridge.log");
+const log = (...parts) => {
+  const line = [new Date().toLocaleString("ro-RO"), ...parts].join(" ");
+  console.log(line);
+  try {
+    if (existsSync(LOG_FILE) && statSync(LOG_FILE).size > 1_000_000) renameSync(LOG_FILE, join(HERE, "bridge.old.log"));
+    appendFileSync(LOG_FILE, line + "\n");
+  } catch {
+    // jurnalul nu are voie să oprească puntea
+  }
+};
 
 async function login(config) {
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
@@ -163,7 +174,9 @@ function runClaude(config, prompt, { resume, send } = {}) {
         const data = JSON.parse(out.trim().split("\n").pop());
         resolve({ ok: !data.is_error, text: String(data.result ?? ""), session: data.session_id });
       } catch {
-        resolve({ ok: false, text: (err || out || "Claude Code s-a oprit fără răspuns.").slice(-1500) });
+        const text = (err || out || "Claude Code s-a oprit fără răspuns.").slice(-2000);
+        log("Claude Code a eșuat:", text);
+        resolve({ ok: false, text });
       }
     });
     child.stdin.end(prompt);
@@ -187,12 +200,14 @@ function spawnLane(config) {
   ];
   if (config.model) args.push("--model", config.model);
   const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
-  const lane = { child, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null };
+  const lane = { child, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null, err: "" };
   const fail = (text) => {
     lane.dead = true;
     const done = lane.done;
     lane.done = null;
-    done?.({ ok: false, text, warmFailed: true });
+    const reason = lane.err.trim().slice(-2000);
+    if (reason) log("Proces treaz oprit:", reason);
+    done?.({ ok: false, text: reason ? `${text}\n${reason}` : text, warmFailed: true });
   };
   child.stdout.on("data", (chunk) => {
     lane.buffer += chunk;
@@ -212,7 +227,7 @@ function spawnLane(config) {
       }
     }
   });
-  child.stderr.on("data", () => {});
+  child.stderr.on("data", (chunk) => (lane.err = (lane.err + chunk).slice(-2000)));
   child.on("error", (error) => fail(`Nu pot porni Claude Code: ${error.message}`));
   child.on("close", () => fail("Claude Code s-a oprit fără răspuns."));
   lanes.push(lane);
