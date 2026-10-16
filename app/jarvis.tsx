@@ -84,11 +84,21 @@ function loadMemory(): Message[] {
     return [];
   }
 }
+// Memoria pentru instrucțiunile lui Argus, luată o dată pe conversație (ca instrucțiunile să nu se schimbe la mijloc).
+let memorySnapshot: string | undefined;
+function stripThinking(messages: Message[]) {
+  for (const message of messages) {
+    if (Array.isArray(message.content)) {
+      message.content = message.content.filter((block) => block.type !== "thinking" && block.type !== "redacted_thinking");
+    }
+  }
+}
 async function fetchMemory(): Promise<Message[]> {
   try {
     const response = await fetch("/api/memorie", { cache: "no-store" });
     if (response.ok) {
-      const { conversatie = [] } = (await response.json()) as { conversatie?: Message[] };
+      const { conversatie = [], prompt } = (await response.json()) as { conversatie?: Message[]; prompt?: string };
+      memorySnapshot = typeof prompt === "string" ? prompt : undefined;
       const messages = cleanMemory(conversatie as { role: "user" | "assistant"; content: string }[]);
       if (messages.length) return messages;
     }
@@ -932,7 +942,13 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: historyRef.current, limba: spokenLanguage(), flux: true, volan: drivingRef.current }),
+          body: JSON.stringify({
+            messages: historyRef.current,
+            limba: spokenLanguage(),
+            flux: true,
+            volan: drivingRef.current,
+            memorie: memorySnapshot,
+          }),
           cache: "no-store",
         });
         if (response.status === 401) {
@@ -964,6 +980,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
                 streamed += event.d;
                 feed(streamed, false);
               } else if (event.t === "end") data = { content: event.content, stop_reason: event.stop_reason };
+              else if (event.t === "strip") stripThinking(historyRef.current);
               else if (event.t === "err") throw new Error(event.error || "Ceva n-a mers. Mai încearcă.");
             }
           }
@@ -971,6 +988,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         } else {
           data = await response.json();
           if (!response.ok || !data.content) throw new Error(data.error || "Ceva n-a mers. Mai încearcă.");
+          if ((data as { strip?: boolean }).strip) stripThinking(historyRef.current);
         }
       } catch (caught) {
         stopSpeaking();
@@ -1020,7 +1038,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     if (!activeRef.current) return;
     cleanRef.current = historyRef.current.at(-1)?.role === "assistant";
     // Poza a fost văzută; în istoric rămâne doar o notă, ca următoarele cereri să plece repede.
+    // Gândirea e legată de istoricul exact, deci pleacă și ea când istoricul se schimbă.
     if (image) {
+      stripThinking(historyRef.current);
       for (const message of historyRef.current) {
         if (Array.isArray(message.content)) {
           message.content = message.content.map((block) =>

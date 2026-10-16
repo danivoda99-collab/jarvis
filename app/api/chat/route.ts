@@ -13,8 +13,26 @@ const MAX_HISTORY = 60;
 function errorMessage(caught: unknown) {
   if (caught instanceof Anthropic.AuthenticationError) return "Cheia Anthropic nu e validă. Verific-o în Vercel.";
   if (caught instanceof Anthropic.RateLimitError) return "Prea multe cereri sau limita lunară atinsă. Mai încearcă puțin mai târziu.";
-  if (caught instanceof Anthropic.APIError) return `Claude a răspuns cu eroare ${caught.status ?? ""}.`.trim();
+  if (caught instanceof Anthropic.APIError) {
+    // Motivul exact (fără date personale), ca o eroare 400 să poată fi reparată din prima.
+    const reason = (caught.error as { error?: { message?: string } } | undefined)?.error?.message ?? "";
+    return `Claude a răspuns cu eroare ${caught.status ?? ""}${reason ? `: ${reason.slice(0, 200)}` : "."}`;
+  }
   return "Nu pot ajunge la Claude.";
+}
+
+// Gândirea lui Claude e legată de începutul exact al conversației. Dacă acesta s-a schimbat (o poză scoasă din
+// istoric, memoria actualizată), API-ul refuză cu 400; atunci reîncercăm o dată fără blocurile de gândire.
+function thinkingRejected(caught: unknown) {
+  return caught instanceof Anthropic.BadRequestError && /thinking|signature/i.test(errorMessage(caught));
+}
+
+function withoutThinking(messages: Anthropic.Beta.BetaMessageParam[]): Anthropic.Beta.BetaMessageParam[] {
+  return messages.map((message) =>
+    Array.isArray(message.content)
+      ? { ...message, content: message.content.filter((block) => block.type !== "thinking" && block.type !== "redacted_thinking") }
+      : message,
+  );
 }
 
 export async function POST(request: Request) {
@@ -32,12 +50,20 @@ export async function POST(request: Request) {
   let romanian = false;
   let wantsStream = false;
   let driving = false;
+  let memorySnapshot: string | null = null;
   try {
-    const body = (await request.json()) as { messages?: Anthropic.Beta.BetaMessageParam[]; limba?: string; flux?: boolean; volan?: boolean };
+    const body = (await request.json()) as {
+      messages?: Anthropic.Beta.BetaMessageParam[];
+      limba?: string;
+      flux?: boolean;
+      volan?: boolean;
+      memorie?: string;
+    };
     messages = Array.isArray(body.messages) ? body.messages : [];
     romanian = body.limba === "ro";
     wantsStream = body.flux === true;
     driving = body.volan === true;
+    if (typeof body.memorie === "string") memorySnapshot = body.memorie.slice(0, 12_000);
   } catch {
     return NextResponse.json({ error: "Cerere invalidă." }, { status: 400 });
   }
@@ -46,8 +72,9 @@ export async function POST(request: Request) {
   }
 
   const client = new Anthropic();
-  // Faptele ținute minte vin la final, ca restul instrucțiunilor să rămână în cache.
-  const memory = await memoryPrompt();
+  // Faptele ținute minte vin la final, ca restul instrucțiunilor să rămână în cache. Telefonul trimite memoria
+  // luată la începutul conversației, ca instrucțiunile să nu se schimbe la mijloc.
+  const memory = memorySnapshot ?? (await memoryPrompt());
   const params: Anthropic.Beta.MessageCreateParamsNonStreaming = {
       model: MODEL,
       max_tokens: 4000,
@@ -66,13 +93,28 @@ export async function POST(request: Request) {
     const body = new ReadableStream({
       async start(controller) {
         const send = (event: object) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-        try {
-          const stream = client.beta.messages.stream(params);
-          stream.on("text", (delta) => send({ t: "d", d: delta }));
+        let started = false;
+        const run = async (request: Anthropic.Beta.MessageCreateParamsNonStreaming) => {
+          const stream = client.beta.messages.stream(request);
+          stream.on("text", (delta) => {
+            started = true;
+            send({ t: "d", d: delta });
+          });
           const message = await stream.finalMessage();
           send({ t: "end", content: message.content, stop_reason: message.stop_reason });
+        };
+        try {
+          await run(params);
         } catch (caught) {
-          send({ t: "err", error: errorMessage(caught) });
+          if (!started && thinkingRejected(caught)) {
+            // Telefonul își curăță și el istoricul, ca următoarea cerere să nu mai dea eroarea.
+            send({ t: "strip" });
+            try {
+              await run({ ...params, messages: withoutThinking(messages) });
+            } catch (again) {
+              send({ t: "err", error: errorMessage(again) });
+            }
+          } else send({ t: "err", error: errorMessage(caught) });
         }
         controller.close();
       },
@@ -81,9 +123,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await client.beta.messages.create(params);
+    let stripped = false;
+    const response = await client.beta.messages.create(params).catch((caught) => {
+      if (!thinkingRejected(caught)) throw caught;
+      stripped = true;
+      return client.beta.messages.create({ ...params, messages: withoutThinking(messages) });
+    });
     return NextResponse.json(
-      { content: response.content, stop_reason: response.stop_reason },
+      { content: response.content, stop_reason: response.stop_reason, strip: stripped },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (caught) {
@@ -94,7 +141,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Prea multe cereri sau limita lunară atinsă. Mai încearcă puțin mai târziu." }, { status: 429 });
     }
     if (caught instanceof Anthropic.APIError) {
-      return NextResponse.json({ error: `Claude a răspuns cu eroare ${caught.status ?? ""}.`.trim() }, { status: 502 });
+      return NextResponse.json({ error: errorMessage(caught) }, { status: 502 });
     }
     return NextResponse.json({ error: "Nu pot ajunge la Claude." }, { status: 502 });
   }
