@@ -13,12 +13,14 @@
     "next": "^16.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "three": "0.128.0"
+    "three": "0.128.0",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/node": "22.15.3",
     "@types/react": "19.1.12",
     "@types/three": "0.128.0",
+    "@types/web-push": "3.6.4",
     "typescript": "5.8.3"
   }
 }

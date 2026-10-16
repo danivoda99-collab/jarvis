@@ -536,7 +536,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     async function poll() {
       if (stopped || document.hidden) return;
       try {
-        const response = await fetch("/api/cereri?semnal=1", { cache: "no-store" });
+        const response = await fetch("/api/cereri?semnal=1&tel=1", { cache: "no-store" });
         if (response.ok) {
           const { semnal } = (await response.json()) as { semnal?: string };
           if (semnal && semnal === lastSignal) return;
@@ -634,6 +634,43 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const [voiceName, setVoiceName] = useState("");
   const [language, setLanguage] = useState<Language>("en");
   const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
+  // Notificările: „off” = se pot porni, „on” = pornite, „denied” = refuzate, „none” = telefonul nu le suportă aici
+  // (pe iPhone merg doar din aplicația pusă pe ecranul principal).
+  const [pushState, setPushState] = useState<"none" | "off" | "on" | "denied">("none");
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+    void navigator.serviceWorker
+      .register("/sw.js")
+      .then(async (registration) => {
+        if (Notification.permission === "denied") return setPushState("denied");
+        const existing = await registration.pushManager.getSubscription();
+        if (existing && Notification.permission === "granted") {
+          setPushState("on");
+          // Abonarea se retrimite la fiecare deschidere, ca serverul s-o aibă mereu.
+          void fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(existing) });
+        } else setPushState("off");
+      })
+      .catch(() => undefined);
+  }, []);
+  async function enablePush() {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") return setPushState(permission === "denied" ? "denied" : "off");
+      const registration = await navigator.serviceWorker.ready;
+      const { cheie } = (await (await fetch("/api/push", { cache: "no-store" })).json()) as { cheie?: string };
+      if (!cheie) throw new Error("fără cheie");
+      const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cheie });
+      const saved = await fetch("/api/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription),
+      });
+      if (!saved.ok) throw new Error("nesalvat");
+      setPushState("on");
+    } catch {
+      setError("Nu am putut porni notificările. Mai încearcă.");
+    }
+  }
   useEffect(() => setLanguage(spokenLanguage()), []);
 
   function setPhase(next: Phase) {
@@ -1191,6 +1228,12 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         </form>
         {error && <p className="error">{error}</p>}
         {googleNotice && <p className="hint">{googleNotice}</p>}
+        {pushState === "off" && (
+          <button type="button" className="connect connect-quiet" onClick={enablePush}>
+            Pornește notificările
+          </button>
+        )}
+        {pushState === "denied" && <p className="hint">Notificările sunt oprite din setările telefonului.</p>}
         <a className={googleConnected ? "connect connect-quiet" : "connect"} href="/api/google/connect">
           {googleConnected ? "Reconectează Google" : "Conectează Google (agendă, to-do, buget)"}
         </a>

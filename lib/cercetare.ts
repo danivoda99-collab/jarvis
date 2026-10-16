@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getCerere, saveCerere } from "@/lib/cereri";
 import { memoryPrompt } from "@/lib/memorie";
+import { notify } from "@/lib/push";
 
 // „Mă documentez și revin”: Claude caută și citește pe internet, pe server, cât Daniel vorbește mai departe cu Argus.
 // Rezultatul ajunge în coada de cereri ca „gata”, iar telefonul îl anunță cu voce, ca la laptop.
@@ -51,4 +52,6 @@ export async function research(id: string, intrebare: string) {
     rezultat: ok ? text : failed || "Nu am găsit nimic sigur.",
     actualizat: new Date().toISOString(),
   });
+  const answer = (ok ? text : failed).split(/\n\s*\n/)[0] ?? "";
+  await notify(ok ? `Am găsit: ${cerere.titlu.replace(/^Cercetare:\s*/, "")}` : "Cercetarea n-a mers", answer, id);
 }
