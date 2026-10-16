@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { QueueError } from "@/lib/cereri";
-import { addFapt, addSchimb, listConversatie, listFapte, removeFapt } from "@/lib/memorie";
+import { addFapt, addSchimb, listConversatie, listFapte, removeFapt, saveLaptopMemory } from "@/lib/memorie";
 
 // Memoria comună: faptele de ținut minte și ultimele schimburi din conversație.
 
@@ -25,12 +25,16 @@ export async function GET() {
   }
 }
 
-// { fapt } ține minte un lucru; { user, assistant } adaugă un schimb la conversație.
+// { fapt } ține minte un lucru; { user, assistant } adaugă un schimb la conversație; { laptop } = memorie.md.
 export async function POST(request: Request) {
   const denied = await guard();
   if (denied) return denied;
-  const body = (await request.json().catch(() => ({}))) as { fapt?: string; user?: string; assistant?: string };
+  const body = (await request.json().catch(() => ({}))) as { fapt?: string; user?: string; assistant?: string; laptop?: string };
   try {
+    if (typeof body.laptop === "string") {
+      await saveLaptopMemory(body.laptop);
+      return NextResponse.json({ ok: true });
+    }
     const fapt = (body.fapt ?? "").trim().slice(0, 300);
     if (fapt) {
       await addFapt(fapt);
