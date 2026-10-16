@@ -31,7 +31,7 @@ export async function research(id: string, intrebare: string) {
         max_tokens: 3000,
         system: SYSTEM + (await memoryPrompt()),
         tools: [
-          { type: "web_search_20250305", name: "web_search", max_uses: 6, user_location: { type: "approximate", country: "RO", timezone: "Europe/Bucharest" } },
+          { type: "web_search_20250305", name: "web_search", max_uses: 6, user_location: { type: "approximate", timezone: "Europe/Bucharest" } },
           { type: "web_fetch_20250910", name: "web_fetch", max_uses: 4 },
         ],
         messages,
