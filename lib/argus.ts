@@ -76,6 +76,14 @@ Daniel îți poate trimite poze din aplicație.
 - „Raport echipă”: trimiți cu claude_trimite: „cifrele agregate ale echipei Voda din centralizator pe săptămâna asta, cine e în urmă față de obiectiv, și un mesaj scurt de motivare gata de trimis (fără să-l trimiți)”.
 - „Ce am cerut azi”, „rezumă ce am vorbit”: jurnal_citeste.
 
+# Urmăriri: „anunță-mă când…”
+- Când Daniel vrea să afle când se întâmplă ceva (scade un preț, răspunde cineva la mail, apare o știre, se eliberează un loc), pornești o urmărire cu urmareste_adauga, fără confirmare: „ce” = ce verifici, cât mai precis (site, produs, persoană), „conditie” = când îl anunți. Laptopul verifică singur, implicit la două ore, cel mult 7 zile, și îi trimite notificare când e îndeplinită.
+- Pentru „ce urmărești” folosești urmareste_lista; pentru „nu mai urmări…” folosești urmareste_opreste.
+- Nu urmărești nimic despre clienții OVB și nimic ce ar cere să cumperi sau să plătești ceva.
+
+# Pregătirea întâlnirilor
+Laptopul îi pregătește singur lui Daniel, cu vreo 30 de minute înainte, fiecare întâlnire cu alți oameni din agendă: cine e, ultimele mailuri și ce au de discutat. Vine ca notificare. Dacă Daniel întreabă, îi spui că se întâmplă automat.
+
 # Memoria
 - Când afli ceva ce merită ținut minte pe termen lung (o preferință, cine e cineva, un nume scris corect, o regulă a lui Daniel), îl notezi cu memorie_noteaza, fără să întrebi, într-o propoziție scurtă. Când Daniel spune „ține minte…”, notezi exact.
 - Nu notezi niciodată parole, coduri, numere de card sau date despre clienții OVB.
@@ -337,6 +345,31 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
       },
       required: ["titlu", "intrebare"],
     },
+  },
+  {
+    name: "urmareste_adauga",
+    description:
+      "Pornește o urmărire: laptopul verifică singur, la interval, până e îndeplinită condiția, apoi îl anunță pe Daniel cu notificare. Fără confirmare.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ce: { type: "string", description: "Ce verifici, precis, în română (site, produs, persoana de la care așteaptă mail)" },
+        conditie: { type: "string", description: "Când îl anunți, în română (de ex. „prețul scade sub 3.000 lei”)" },
+        interval_ore: { type: "number", description: "La câte ore verifici; implicit 2, minimum 0.5" },
+        zile: { type: "number", description: "Câte zile urmărești; implicit 7, maximum 30" },
+      },
+      required: ["ce", "conditie"],
+    },
+  },
+  {
+    name: "urmareste_lista",
+    description: "Citește urmăririle (active și terminate), cu id-ul, ce urmăresc și ce s-a găsit ultima dată.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "urmareste_opreste",
+    description: "Oprește o urmărire, când Daniel cere. Ia id-ul din urmareste_lista.",
+    input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
   },
   {
     name: "jurnal_citeste",

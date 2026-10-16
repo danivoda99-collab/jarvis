@@ -92,8 +92,10 @@ function loadConfig() {
 }
 
 function saveConfig(config) {
+  // Păstrează și setările scrise de mână (model, chrome, pregatire, urmariri).
+  const saved = existsSync(CONFIG_FILE) ? JSON.parse(readFileSync(CONFIG_FILE, "utf8")) : {};
   const { url, folder, claude, cookie } = config;
-  writeFileSync(CONFIG_FILE, JSON.stringify({ url, folder, claude, cookie }, null, 2));
+  writeFileSync(CONFIG_FILE, JSON.stringify({ ...saved, url, folder, claude, cookie }, null, 2));
 }
 
 const log = (...parts) => console.log(new Date().toLocaleString("ro-RO"), ...parts);
@@ -114,8 +116,8 @@ async function login(config) {
   log("Conectat la Argus.");
 }
 
-async function api(config, method, body, query = "") {
-  const response = await fetch(`${config.url}/api/cereri${query}`, {
+async function api(config, method, body, query = "", path = "/api/cereri") {
+  const response = await fetch(`${config.url}${path}${query}`, {
     method,
     headers: { Cookie: `jarvis_session=${config.cookie}`, ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -244,10 +246,125 @@ function updated() {
   }
 }
 
+// Repornirea după actualizare: lucrătorul iese cu codul ăsta, iar procesul de pază îl pornește din nou,
+// așa că rămân mereu doar două procese (nu un lanț care crește la fiecare actualizare).
+const RESTART_CODE = 75;
+
 function restart() {
   log("Puntea a fost actualizată. Repornesc.");
-  const child = spawn(process.execPath, [SELF], { stdio: "inherit", windowsHide: true });
-  child.on("exit", (code) => process.exit(code ?? 0));
+  process.exit(RESTART_CODE);
+}
+
+function supervise() {
+  const child = spawn(process.execPath, [SELF, "--worker"], { stdio: "inherit", windowsHide: true });
+  child.on("exit", (code) => (code === RESTART_CODE ? supervise() : process.exit(code ?? 0)));
+}
+
+// ——— Lucruri pe care laptopul le face singur, fără cerere: urmăririle și pregătirea întâlnirilor ———
+
+const PREP_FILE = join(HERE, "pregatiri.json");
+const SCAN_EVERY_MS = 3 * 60 * 60_000; // agenda se recitește la 3 ore
+const PREP_BEFORE_MIN = [15, 40]; // pregătirea pleacă între 40 și 15 minute înainte
+
+function firstLine(text) {
+  const [head = "", ...rest] = text.trim().split("\n");
+  return { head: head.trim().toUpperCase().replace(/[^A-ZĂÂÎȘȚ]/g, ""), rest: rest.join("\n").trim() };
+}
+
+async function checkWatchers(config) {
+  const { urmariri = [] } = await api(config, "GET", undefined, "", "/api/urmariri");
+  const now = Date.now();
+  const due = urmariri.find(
+    (item) => item.stare === "activă" && now - Date.parse(item.verificat ?? item.creat ?? 0) >= item.intervalMin * 60_000,
+  );
+  if (!due) return;
+  log("Verific urmărirea:", due.ce);
+  const run = await runClaude(
+    config,
+    [
+      `Verifică acum, pentru Daniel: ${due.ce}`,
+      `Îl anunțăm când: ${due.conditie}`,
+      due.ultimul ? `La verificarea trecută ai găsit: ${due.ultimul}` : "",
+      "Cauți repede (web sau Gmail, doar citire). Nu trimiți nimic, nu cumperi nimic, nu scrii fișiere.",
+      "Primul rând: exact DA (condiția e îndeplinită acum) sau NU. Apoi cel mult 3 rânduri scurte: ce ai găsit, cu cifre și sursa. Dacă e DA, al doilea rând e o propoziție bună de citit cu voce.",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+  const { head, rest } = firstLine(run.text || "");
+  if (run.ok && head === "DA") {
+    await api(config, "POST", { titlu: `Urmărire: ${due.ce.slice(0, 80)}`, cerere: `${due.ce} — ${due.conditie}`, rezultat: rest || "Condiția e îndeplinită." });
+    await api(config, "PATCH", { id: due.id, stare: "îndeplinită", ultimul: rest.slice(0, 500) }, "", "/api/urmariri");
+    log("Urmărire îndeplinită:", due.ce);
+  } else {
+    await api(config, "PATCH", { id: due.id, ultimul: (rest || run.text || "").slice(0, 500) }, "", "/api/urmariri");
+  }
+}
+
+function loadPreps() {
+  try {
+    return JSON.parse(readFileSync(PREP_FILE, "utf8"));
+  } catch {
+    return { scanat: 0, intalniri: [], facute: [] };
+  }
+}
+
+function savePreps(state) {
+  writeFileSync(PREP_FILE, JSON.stringify({ ...state, facute: state.facute.slice(-100) }, null, 2));
+}
+
+async function prepareMeetings(config) {
+  const state = loadPreps();
+  if (Date.now() - state.scanat > SCAN_EVERY_MS) {
+    log("Recitesc agenda pentru pregătiri.");
+    const run = await runClaude(
+      config,
+      `Acum e ${new Date().toISOString()}. Citește din Google Calendar evenimentele lui Daniel din următoarele 30 de ore. Păstrează doar întâlnirile cu alți oameni (au participanți, link de video sau sunt clar o întâlnire), nu reminderele și nu blocurile personale. Răspunde DOAR cu un JSON pe un rând: [{"id":"<id eveniment>","titlu":"<titlu>","inceput":"<ISO cu fus orar>"}], sau [] dacă nu e nimic.`,
+    );
+    const match = (run.text || "").match(/\[[\s\S]*\]/);
+    if (run.ok && match) {
+      try {
+        state.intalniri = JSON.parse(match[0]).filter((item) => item && item.id && item.inceput);
+        state.scanat = Date.now();
+      } catch {
+        // încercăm la următoarea trecere
+      }
+    }
+    savePreps(state);
+  }
+  const now = Date.now();
+  for (const meeting of state.intalniri) {
+    const minutes = (Date.parse(meeting.inceput) - now) / 60_000;
+    const key = `${meeting.id}@${meeting.inceput}`;
+    if (minutes < PREP_BEFORE_MIN[0] || minutes > PREP_BEFORE_MIN[1] || state.facute.includes(key)) continue;
+    state.facute.push(key);
+    savePreps(state);
+    const at = new Date(meeting.inceput).toLocaleTimeString("ro-RO", { timeZone: "Europe/Bucharest", hour: "2-digit", minute: "2-digit" });
+    log("Pregătesc întâlnirea:", meeting.titlu);
+    await api(config, "POST", {
+      titlu: `Pregătire: ${String(meeting.titlu).slice(0, 80)}`,
+      cerere: [
+        `Pregătește-l pe Daniel pentru întâlnirea „${meeting.titlu}” de la ${at} (id în Calendar: ${meeting.id}).`,
+        "Din agendă: cine participă, unde e și descrierea. Din Gmail: ultimele 2-3 mailuri cu participanții, pe scurt. Dacă e cineva din echipa Voda, cifrele lui agregate din centralizator (doar citire).",
+        "Dacă e o întâlnire cu un client OVB, nu cauți și nu scrii nimic despre client: doar ora, locul și ce are Daniel în agendă înainte și după.",
+        `Rezumatul începe cu o propoziție bună de citit cu voce, de exemplu „La ${at} ai ${meeting.titlu}.”, apoi cel mult 6 rânduri și, la final, 3 puncte de discutat. Nu trimiți nimic.`,
+      ].join("\n\n"),
+    });
+  }
+}
+
+let chores = false;
+let choresAt = 0;
+function runChores(config) {
+  if (chores || Date.now() - choresAt < 60_000) return;
+  chores = true;
+  choresAt = Date.now();
+  (async () => {
+    if (config.urmariri !== false) await checkWatchers(config);
+    if (config.pregatire !== false) await prepareMeetings(config);
+  })()
+    .catch((error) => log("Treburile automate n-au mers:", error.message))
+    .finally(() => (chores = false));
 }
 
 async function main() {
@@ -261,7 +378,8 @@ async function main() {
   const wait = () => new Promise((resolve) => setTimeout(resolve, Date.now() < busyUntil ? FAST_POLL_MS : POLL_MS));
   for (;;) {
     // Repornirea după actualizare așteaptă să se termine ce e în lucru.
-    if (updated() && running.size === 0) return restart();
+    if (updated() && running.size === 0 && !chores) return restart();
+    if (!updated()) runChores(config);
     try {
       // Întâi semnalul (o comandă); lista se citește doar când s-a schimbat ceva.
       const { semnal } = await api(config, "GET", undefined, "?semnal=1");
@@ -307,7 +425,8 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+if (!process.argv.includes("--worker")) supervise();
+else main().catch((error) => {
   log("Oprit:", error.message);
   process.exit(1);
 });
