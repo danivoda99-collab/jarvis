@@ -71,3 +71,17 @@ export async function memoryPrompt(): Promise<string> {
     return "";
   }
 }
+
+// Numele proprii din memorie (oameni, locuri), date recunoașterii vocii ca să le scrie corect.
+export async function knownNames(limit = 80): Promise<string[]> {
+  try {
+    const [fapte, laptop] = await Promise.all([listFapte(), command<string | null>("GET", LAPTOP)]);
+    const text = [...fapte, laptop ?? ""].join("\n");
+    const words = text.match(/(?<![\p{L}.])\p{Lu}[\p{Ll}\p{M}]+(?:[ -]\p{Lu}[\p{Ll}\p{M}]+)*/gu) ?? [];
+    const names = new Set<string>();
+    for (const word of words) if (word.length > 2) names.add(word);
+    return [...names].slice(0, limit);
+  } catch {
+    return [];
+  }
+}

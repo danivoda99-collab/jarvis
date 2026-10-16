@@ -76,7 +76,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
-9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). După „Da”, în Chrome, în tabul web.whatsapp.com (îl deschizi dacă lipsește): scrii numele în căutare, verifici o singură dată cu textul paginii care e contactul, deschizi conversația, scrii textul confirmat, fără nicio schimbare, și apeși Enter. Lucrezi repede: folosești căutarea și textul paginii, nu capturi de ecran, decât dacă altfel nu merge. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
+9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, în Chrome, în tabul web.whatsapp.com (îl deschizi dacă lipsește): scrii numele în căutare, verifici o singură dată cu textul paginii care e contactul, deschizi conversația, scrii textul confirmat, fără nicio schimbare, și apeși Enter. Lucrezi repede: folosești căutarea și textul paginii, nu capturi de ecran, decât dacă altfel nu merge. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
 10. Mail către un nume: cauți adresa în mailurile anterioare, cu aceeași toleranță la nume auzite greșit ca la WhatsApp. Dacă nu e sigură, nu trimiți și spui de ce.
 11. După ce ai trimis, rezumatul începe cu o propoziție scurtă, bună de citit cu voce: de exemplu „Trimis lui Jess pe WhatsApp.”
 
@@ -195,14 +195,16 @@ const LANE_MAX_RUNS = 15; // după atâtea cereri, procesul se reîmprospăteaz�
 const LANE_IDLE_MS = 20 * 60_000; // un proces nefolosit atâta timp se oprește (primul rămâne mereu)
 const lanes = [];
 
-function spawnLane(config) {
+function spawnLane(config, send = false) {
+  const browser = send && config.chrome !== false;
   const args = [
     "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
     "--permission-mode", "acceptEdits",
-    "--allowedTools", WORK_TOOLS.join(","),
-    "--disallowedTools", [...BLOCKED, ...AFTER_YES_TOOLS].join(","),
+    "--allowedTools", (send ? [...WORK_TOOLS, ...AFTER_YES_TOOLS, ...(browser ? [BROWSER] : [])] : WORK_TOOLS).join(","),
+    "--disallowedTools", (send ? BLOCKED : [...BLOCKED, ...AFTER_YES_TOOLS]).join(","),
     "--append-system-prompt", RULES,
   ];
+  if (browser) args.push("--chrome");
   if (config.model) args.push("--model", config.model);
   const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true });
   const lane = { child, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null, err: "" };
@@ -235,19 +237,41 @@ function spawnLane(config) {
   child.stderr.on("data", (chunk) => (lane.err = (lane.err + chunk).slice(-2000)));
   child.on("error", (error) => fail(`Nu pot porni Claude Code: ${error.message}`));
   child.on("close", () => fail("Claude Code s-a oprit fără răspuns."));
-  lanes.push(lane);
+  if (!send) lanes.push(lane);
   return lane;
 }
 
-function retireLane(lane) {
+// Procesul de trimitere (cu Chrome) se pornește când apare o confirmare, ca după „Da” să fie deja treaz.
+// Primește doar cereri confirmate de Daniel; stă pornit cel mult 10 minute fără treabă.
+const SEND_IDLE_MS = 10 * 60_000;
+let sendLane = null;
+
+function warmSendLane(config) {
+  if (config.treaz === false || (sendLane && !sendLane.dead)) return;
+  sendLane = spawnLane(config, true);
+}
+
+function trimSendLane() {
+  if (sendLane && (sendLane.dead || (!sendLane.busy && Date.now() - sendLane.used > SEND_IDLE_MS))) {
+    stopLane(sendLane);
+    sendLane = null;
+  }
+}
+
+function stopLane(lane) {
   lane.dead = true;
-  lanes.splice(lanes.indexOf(lane), 1);
   try {
     lane.child.stdin.end();
     lane.child.kill();
   } catch {
     // deja oprit
   }
+}
+
+function retireLane(lane) {
+  if (lanes.includes(lane)) lanes.splice(lanes.indexOf(lane), 1);
+  if (lane === sendLane) sendLane = null;
+  stopLane(lane);
 }
 
 // Oprește procesele în plus care stau degeaba; primul rămâne treaz.
@@ -257,10 +281,19 @@ function trimLanes() {
   }
 }
 
-async function runWarm(config, prompt) {
-  if (config.treaz === false) return runClaude(config, prompt);
-  for (const lane of [...lanes]) if (lane.dead) retireLane(lane);
-  const lane = lanes.find((item) => !item.busy) ?? spawnLane(config);
+async function runWarm(config, prompt, { send, resume } = {}) {
+  if (config.treaz === false) return runClaude(config, prompt, { send, resume });
+  let lane;
+  if (send) {
+    if (!sendLane || sendLane.dead || sendLane.busy) {
+      if (sendLane?.busy) return runClaude(config, prompt, { send, resume });
+      sendLane = spawnLane(config, true);
+    }
+    lane = sendLane;
+  } else {
+    for (const item of [...lanes]) if (item.dead) retireLane(item);
+    lane = lanes.find((item) => !item.busy) ?? spawnLane(config);
+  }
   lane.busy = true;
   lane.runs += 1;
   lane.used = Date.now();
@@ -283,11 +316,9 @@ async function runWarm(config, prompt) {
   });
   lane.busy = false;
   lane.used = Date.now();
-  if (lane.dead || lane.runs >= LANE_MAX_RUNS) {
-    if (lanes.includes(lane)) retireLane(lane);
-  }
+  if (lane.dead || lane.runs >= LANE_MAX_RUNS) retireLane(lane);
   // Dacă procesul treaz a căzut, cererea se reface o dată cu pornire normală.
-  return result.warmFailed ? runClaude(config, prompt) : result;
+  return result.warmFailed ? runClaude(config, prompt, { send, resume }) : result;
 }
 
 // Ultimul rând „CONFIRMARE: {...}” înseamnă că Claude vrea să trimită ceva și așteaptă „Da”.
@@ -330,7 +361,7 @@ async function handle(config, cerere) {
     : `Cerere de la Daniel, prin Argus (${new Date(cerere.creat).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" })}):\n\n${cerere.cerere}`;
   const memory = await knownFacts(config);
   const full = memory ? `${memory}\n\n${prompt}` : prompt;
-  const run = send ? await runClaude(config, full, { resume: cerere.sesiune, send }) : await runWarm(config, full);
+  const run = await runWarm(config, full, send ? { send, resume: cerere.sesiune } : {});
   if (!run.ok) {
     await api(config, "PATCH", { id: cerere.id, status: "eroare", rezultat: run.text || "Ceva n-a mers." });
     log("Eroare:", cerere.titlu);
@@ -352,6 +383,7 @@ async function handle(config, cerere) {
       },
     });
     log("Aștept confirmarea lui Daniel:", cerere.titlu);
+    warmSendLane(config);
     return;
   }
   await api(config, "PATCH", { id: cerere.id, status: "gata", rezultat: text, sesiune: run.session });
@@ -511,6 +543,7 @@ function runChores(config) {
   choresAt = Date.now();
   (async () => {
     trimLanes();
+    trimSendLane();
     await shareMemory(config).catch(() => {});
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);

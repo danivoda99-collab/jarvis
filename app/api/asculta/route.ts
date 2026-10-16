@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
+import { knownNames } from "@/lib/memorie";
 import { STT_MODEL, openaiError, openaiKey } from "@/lib/openai";
 
 // Primește înregistrarea a ce a spus Daniel și o transformă în text românesc.
@@ -26,7 +27,12 @@ export async function POST(request: Request) {
   upstream.set("model", STT_MODEL);
   upstream.set("language", "ro");
   // Cuvintele pe care Daniel le spune des, ca să fie scrise corect.
-  upstream.set("prompt", "Argus, accept. Argus, refuz. Agenda, to-do, buget, OVB, Alba Iulia, București.");
+  // Plus numele oamenilor din memorie, ca „Dolgae” să nu devină „Dolgaie”.
+  const names = await knownNames();
+  upstream.set(
+    "prompt",
+    `Argus, accept. Argus, refuz. Agenda, to-do, buget, OVB, Alba Iulia, București.${names.length ? ` ${names.join(", ")}.` : ""}`,
+  );
   try {
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
