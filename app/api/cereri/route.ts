@@ -38,6 +38,8 @@ export async function POST(request: Request) {
     titlu?: string;
     cerere?: string;
     confirmat?: { titlu?: string; text?: string; destinatar?: string };
+    // Laptopul raportează direct un rezultat (o urmărire îndeplinită, o pregătire de întâlnire).
+    rezultat?: string;
   };
   const text = (body.cerere ?? "").trim().slice(0, 4000);
   if (!text) return NextResponse.json({ error: "Lipsește cererea." }, { status: 400 });
@@ -49,7 +51,15 @@ export async function POST(request: Request) {
       }
     : undefined;
   try {
-    const cerere = await addCerere((body.titlu ?? "").trim().slice(0, 120) || text.slice(0, 60), text, confirmed);
+    const titlu = (body.titlu ?? "").trim().slice(0, 120) || text.slice(0, 60);
+    if (body.rezultat) {
+      const cerere = await addCerere(titlu, text, undefined, "în lucru");
+      const done = { ...cerere, status: "gata" as const, rezultat: String(body.rezultat).slice(0, 8000), actualizat: new Date().toISOString() };
+      await saveCerere(done);
+      await notify(titlu, firstSentence(done.rezultat), done.id);
+      return NextResponse.json({ ok: true, id: cerere.id });
+    }
+    const cerere = await addCerere(titlu, text, confirmed);
     return NextResponse.json({ ok: true, id: cerere.id });
   } catch (caught) {
     return failure(caught);

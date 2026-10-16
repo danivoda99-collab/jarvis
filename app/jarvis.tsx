@@ -493,6 +493,16 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       return result.startsWith("Eroare") ? result : "Cercetarea a pornit în fundal. Rezultatul vine singur, cu voce. Continuă conversația.";
     },
     jurnal_citeste: () => callApi("/api/jurnal"),
+    urmareste_adauga: (parameters: { ce?: unknown; conditie?: unknown; interval_ore?: unknown; zile?: unknown }) =>
+      callApi("/api/urmariri", "POST", {
+        ce: asText(parameters.ce),
+        conditie: asText(parameters.conditie),
+        interval_ore: Number(parameters.interval_ore) || undefined,
+        zile: Number(parameters.zile) || undefined,
+      }),
+    urmareste_lista: () => callApi("/api/urmariri"),
+    urmareste_opreste: (parameters: { id?: unknown }) =>
+      callApi("/api/urmariri", "PATCH", { id: asText(parameters.id), stare: "oprită" }),
     claude_cereri: async () => {
       const raw = await callApi("/api/cereri");
       if (raw.startsWith("Eroare")) return raw;
