@@ -787,6 +787,10 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
 
   // Când Claude de pe laptop cere o decizie, Argus o spune pe scurt (dacă nu vorbește deja), apoi ascultă „accept” / „refuz”.
   async function announce(title: string, text: string) {
+    // Dacă Argus tocmai vorbește sau se gândește, decizia așteaptă rândul (cel mult un minut), apoi se citește.
+    for (let tries = 0; tries < 120 && activeRef.current && phaseRef.current !== "listening"; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
     if (!(await waitForSilence())) return;
     if (!activeRef.current || silentRef.current || phaseRef.current !== "listening") return;
     const decision = (text || title).slice(0, 300);
