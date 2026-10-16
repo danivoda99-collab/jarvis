@@ -244,9 +244,8 @@ function spawnLane(config, send = false) {
   return lane;
 }
 
-// Procesul de trimitere (cu Chrome) se pornește când apare o confirmare, ca după „Da” să fie deja treaz.
-// Primește doar cereri confirmate de Daniel; stă pornit cel mult 10 minute fără treabă.
-const SEND_IDLE_MS = 10 * 60_000;
+// Procesul de trimitere (cu Chrome) stă mereu treaz, ca după „Da” să înceapă imediat.
+// Primește doar cereri confirmate de Daniel.
 let sendLane = null;
 
 function warmSendLane(config) {
@@ -254,11 +253,10 @@ function warmSendLane(config) {
   sendLane = spawnLane(config, true);
 }
 
-function trimSendLane() {
-  if (sendLane && (sendLane.dead || (!sendLane.busy && Date.now() - sendLane.used > SEND_IDLE_MS))) {
-    stopLane(sendLane);
-    sendLane = null;
-  }
+// Ținut mereu treaz: confirmările făcute direct în aplicație ajung aici fără etapa de pregătire.
+function trimSendLane(config) {
+  if (sendLane?.dead) sendLane = null;
+  warmSendLane(config);
 }
 
 function stopLane(lane) {
@@ -347,7 +345,9 @@ function table(value) {
 
 async function handle(config, cerere) {
   const send = cerere.status === "confirmată";
-  log(send ? "Trimit (confirmat):" : "Cerere nouă:", cerere.titlu);
+  const started = Date.now();
+  const waited = cerere.actualizat || cerere.creat ? Math.max(0, started - Date.parse(cerere.actualizat || cerere.creat)) : 0;
+  log(send ? "Trimit (confirmat):" : "Cerere nouă:", cerere.titlu, `(a așteptat ${Math.round(waited / 1000)} s)`);
   await api(config, "PATCH", {
     id: cerere.id,
     status: "în lucru",
@@ -385,12 +385,12 @@ async function handle(config, cerere) {
         tabel: table(confirmare.tabel),
       },
     });
-    log("Aștept confirmarea lui Daniel:", cerere.titlu);
+    log("Aștept confirmarea lui Daniel:", cerere.titlu, `(${Math.round((Date.now() - started) / 1000)} s)`);
     warmSendLane(config);
     return;
   }
   await api(config, "PATCH", { id: cerere.id, status: "gata", rezultat: text, sesiune: run.session });
-  log("Gata:", cerere.titlu);
+  log("Gata:", cerere.titlu, `(${Math.round((Date.now() - started) / 1000)} s)`);
 }
 
 // Când fișierul ăsta e actualizat, puntea se repornește singură între două cereri, în aceeași fereastră.
@@ -529,13 +529,21 @@ async function knownFacts(config) {
 // memorie.md de pe laptop ajunge și la Argus pe telefon (cel mult 4 KB), când se schimbă.
 const MEMORY_FILE = "memorie.md";
 let memorySent = 0;
+let contactsSent = 0;
 async function shareMemory(config) {
   const file = join(config.folder, MEMORY_FILE);
-  if (!existsSync(file)) return;
-  const changed = statSync(file).mtimeMs;
-  if (changed === memorySent) return;
-  await api(config, "POST", { laptop: readFileSync(file, "utf8").slice(0, 4000) }, "", "/api/memorie");
-  memorySent = changed;
+  if (existsSync(file) && statSync(file).mtimeMs !== memorySent) {
+    const changed = statSync(file).mtimeMs;
+    await api(config, "POST", { laptop: readFileSync(file, "utf8").slice(0, 4000) }, "", "/api/memorie");
+    memorySent = changed;
+  }
+  // Numele exacte din WhatsApp (fără clienți OVB), ca telefonul să pună în confirmare persoana corectă.
+  const contacts = join(config.folder, "contacte.md");
+  if (existsSync(contacts) && statSync(contacts).mtimeMs !== contactsSent) {
+    const changed = statSync(contacts).mtimeMs;
+    await api(config, "POST", { contacte: readFileSync(contacts, "utf8").slice(0, 3000) }, "", "/api/memorie");
+    contactsSent = changed;
+  }
 }
 
 let chores = false;
@@ -546,7 +554,7 @@ function runChores(config) {
   choresAt = Date.now();
   (async () => {
     trimLanes();
-    trimSendLane();
+    trimSendLane(config);
     await shareMemory(config).catch(() => {});
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);
