@@ -785,6 +785,8 @@ body {
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
   animation: win-open 0.42s 0.32s cubic-bezier(0.2, 0.9, 0.3, 1) both;
   overflow: hidden;
+  /* În lista care se derulează, fereastra nu se strânge (altfel graficele de jos se taie). */
+  flex-shrink: 0;
 }
 
 .card::before {
@@ -1047,4 +1049,171 @@ body {
   border: 1px solid rgba(212, 166, 74, 0.3);
   border-radius: 6px;
   padding: 3px 6px;
+}
+
+/* Grafice în ferestre: cifre mari, bare de progres, bare, linii, imagini. */
+.viz {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.viz-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.viz-tile {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(244, 236, 216, 0.06);
+  border: 1px solid rgba(212, 166, 74, 0.25);
+}
+
+.viz-tile-label,
+.viz-tile-note {
+  font-size: 12px;
+  color: var(--ivory-muted);
+}
+
+.viz-tile-value {
+  font-size: 17px;
+  white-space: nowrap;
+  color: var(--ivory);
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-progress {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.viz-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.viz-progress-value {
+  color: var(--ivory-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.viz-progress-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(244, 236, 216, 0.1);
+  overflow: hidden;
+}
+
+.viz-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--gold);
+  transition: width 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.viz-progress-near .viz-progress-fill {
+  background: var(--flame);
+}
+
+.viz-progress-over .viz-progress-fill {
+  background: var(--danger);
+}
+
+.viz-progress-over .viz-progress-value {
+  color: var(--danger);
+}
+
+.viz-chart {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.viz-chart figcaption {
+  font-size: 13px;
+  color: var(--gold);
+}
+
+.viz-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--ivory-muted);
+}
+
+.viz-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  margin-right: 5px;
+}
+
+.viz-bars {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.viz-bars li {
+  display: grid;
+  grid-template-columns: minmax(64px, 30%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.viz-bar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viz-bar-tracks {
+  display: grid;
+  gap: 2px;
+}
+
+.viz-bar {
+  display: block;
+  height: 8px;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+}
+
+.viz-bar-value {
+  color: var(--ivory-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.viz-line {
+  width: 100%;
+  height: auto;
+}
+
+.viz-grid {
+  stroke: rgba(244, 236, 216, 0.1);
+}
+
+.viz-axis {
+  fill: var(--ivory-muted);
+  font-size: 10px;
+}
+
+.viz-image {
+  width: 100%;
+  border-radius: 10px;
+  display: block;
 }

@@ -74,6 +74,9 @@ Memoria ta: în folderul curent sunt memorie.md (cine e Daniel, cum îi place s�
 
 Cum răspunzi:
 - În română, cu diacritice. La final, un rezumat scurt de cel mult 10 rânduri: ce ai făcut și ce a ieșit.
+- Când rezultatul are cifre care se văd mai bine decât se citesc (rapoarte de echipă, progres față de obiective, comparații între oameni sau luni, evoluții, bugete), pui după rezumat un rând, exact:
+VIZUAL: {"cifre": [{"eticheta": "...", "valoare": "..."}], "progres": [{"eticheta": "...", "valoare": 0, "maxim": 0, "unitate": "..."}], "bare": {"titlu": "...", "unitate": "...", "legenda": ["...", "..."], "elemente": [{"eticheta": "...", "valoare": 0, "valoare2": 0}]}, "linie": {"titlu": "...", "etichete": ["..."], "serii": [{"nume": "...", "valori": [0]}]}, "tabel": [["antet", "..."], ["...", "..."]]}
+  Pe un singur rând, JSON valid; pui doar secțiunile potrivite (progres pentru „cum stă X față de obiectiv”, bare pentru comparații, cu valoare2 când compari două perioade, linie pentru evoluții, tabel pentru liste cu mai multe coloane). Pe telefon apare ca grafic.
 - Fișierele pentru proiecte le ții în folderul curent, câte un subfolder pe proiect. Nu scrii în afara lui.
 - Poți rula comenzi în folderul de proiecte (git, node, npm, python). Nu instalezi programe pe sistem și nu schimbi setările laptopului.
 
@@ -367,6 +370,17 @@ async function runWarm(config, prompt, { kind = "work", resume, prep } = {}) {
   return result.warmFailed ? runClaude(config, prompt, { send, read, resume }) : result;
 }
 
+// Un rând „VIZUAL: {...}” are graficele pentru telefon; se scoate din text și merge separat.
+function splitVisual(text) {
+  const match = text.match(/^VIZUAL:\s*(\{.*\})\s*$/m);
+  if (!match) return { text };
+  try {
+    return { text: (text.slice(0, match.index) + text.slice(match.index + match[0].length)).trim(), vizual: JSON.parse(match[1]) };
+  } catch {
+    return { text };
+  }
+}
+
 // Ultimul rând „CONFIRMARE: {...}” înseamnă că Claude vrea să trimită ceva și așteaptă „Da”.
 function splitConfirmation(text) {
   const match = text.match(/\n?CONFIRMARE:\s*(\{[\s\S]*\})\s*$/);
@@ -440,7 +454,8 @@ async function handle(config, cerere) {
     warmSendLane(config);
     return;
   }
-  await api(config, "PATCH", { id: cerere.id, status: "gata", rezultat: text, sesiune: run.session });
+  const { text: clean, vizual } = splitVisual(text);
+  await api(config, "PATCH", { id: cerere.id, status: "gata", rezultat: clean, vizual, sesiune: run.session });
   log("Gata:", cerere.titlu, `(${Math.round((Date.now() - started) / 1000)} s)`);
 }
 

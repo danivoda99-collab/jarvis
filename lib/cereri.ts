@@ -1,6 +1,8 @@
 // Coada de cereri dintre Argus și Claude de pe laptop, ținută în Upstash Redis (Vercel → Storage).
 // Argus pune cererea, laptopul o preia, o face și scrie rezultatul înapoi.
 
+import type { Vizual } from "@/lib/vizual";
+
 export type Status = "nouă" | "în lucru" | "așteaptă confirmare" | "confirmată" | "refuzată" | "gata" | "eroare";
 
 export type Cerere = {
@@ -14,6 +16,8 @@ export type Cerere = {
   // Ce vrea Claude să facă și are nevoie de „Da” (un mail, un mesaj): textul exact și destinatarul.
   confirmare?: { titlu: string; text: string; destinatar?: string; tabel?: string[][] };
   sesiune?: string;
+  // Grafice, tabele, bare de progres trimise de laptop odată cu rezultatul.
+  vizual?: Vizual;
 };
 
 const LIST = "argus:cereri";
