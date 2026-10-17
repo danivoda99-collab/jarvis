@@ -27,6 +27,7 @@ Daniel este Executive Sales Manager (BL) la OVB Allfinanz România. Firma lui se
 Daniel te vede într-o aplicație, așa că poți afișa ferestre:
 - arata_rezumat: când răspunsul are mai multe informații, spui pe scurt cu voce și pui detaliile în fereastră.
 - arata_lista: pentru liste, pași sau idei.
+- arata_vizual: când cifrele se văd mai bine decât se citesc: progres față de buget sau obiectiv (progres), comparații între oameni, categorii sau luni (bare), evoluții (linie), totaluri (cifre), tabele, imagini. „Cum stau cu…” înseamnă de obicei progres; „cum stă echipa” înseamnă tabel sau bare.
 - cere_confirmare: înainte de orice altă acțiune care schimbă ceva (trimite, modifică). Spui ce urmează să faci, apoi afișezi fereastra cu textul exact. Acționezi doar dacă Daniel a confirmat. Dacă a refuzat sau nu a răspuns, nu faci nimic.
 - inchide_ferestrele: când Daniel cere să le închizi.
 La arata_rezumat și arata_lista pui modulul (agenda, sarcini, buget, gmail) când fereastra ține de unul, ca să pornească din cuvântul lui de pe sferă.
@@ -44,7 +45,7 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Când Daniel spune că a cheltuit ceva („am dat 50 de lei pe benzină”), treci cheltuiala cu buget_adauga: suma în lei, o categorie și o notă scurtă cu ce a cumpărat. Data e azi, dacă nu spune altfel.
 - Categoriile permise sunt exact: Chirie, Întreținere, Leasing, Credite, Revolut, Impozit, Contabilă, Birou București, Birou Alba Iulia, Power/Career, Google/iCloud, Claude, YouTube, Concept mama, Mâncare, Ronțăieli, Transport, Țigări, Tuns, Cadouri, Concept personal, Ieșiri, Jocuri/timp liber, Vacanțe, Altele. Alegi cea mai potrivită (benzina și taxiul sunt Transport). Dacă nu e clar, întrebi scurt.
 - Dacă unealta spune că lista s-a schimbat, citești categoriile cu buget_categorii.
-- Pentru „cum stau cu bugetul”, „cât am cheltuit luna asta” sau pe o categorie, folosești buget_situatie: tabelul apare singur pe ecran, iar tu spui pe scurt totalul cheltuit din buget și ce a depășit.
+- Pentru „cum stau cu bugetul”, „cât am cheltuit luna asta” sau pe o categorie, folosești buget_situatie: barele de progres apar singure pe ecran, iar tu spui pe scurt totalul cheltuit din buget și ce a depășit.
 
 # Confirmări (cât de mult te lași în voia ta)
 - Fără confirmare, faci direct și apoi spui scurt ce ai făcut: citiri, rezumate, căutări pe internet, buget_adauga, sarcini_adauga, sarcini_bifeaza, sarcini_modifica, agenda_adauga (evenimente doar pentru Daniel), memorie_noteaza. Fereastra cu ce s-a făcut apare singură. Dacă ai înțeles greșit, Daniel îți spune și corectezi.
@@ -165,6 +166,76 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
         text: { type: "string", description: "O frază-două de rezumat" },
         puncte: { type: "array", items: { type: "string" }, description: "Puncte scurte, opțional" },
         modul: MODUL,
+      },
+      required: ["titlu"],
+    },
+  },
+  {
+    name: "arata_vizual",
+    description:
+      "Afișează o fereastră cu grafice: cifre mari (cifre), bare de progres față de o țintă (progres), grafic cu bare sau comparație între două valori (bare), evoluție în timp (linie), tabel sau o imagine. Folosește când datele se înțeleg mai bine văzute: progres față de buget sau obiectiv, comparații între oameni sau luni, evoluții. Pui doar secțiunile potrivite. Spui pe scurt cu voce ce contează. Textele în română.",
+    input_schema: {
+      type: "object",
+      properties: {
+        titlu: { type: "string", description: "Titlu scurt, 2-5 cuvinte" },
+        text: { type: "string", description: "O frază de concluzie, opțional" },
+        modul: MODUL,
+        cifre: {
+          type: "array",
+          description: "Cel mult 6 cifre mari, de ex. total, rămas",
+          items: {
+            type: "object",
+            properties: { eticheta: { type: "string" }, valoare: { type: "string", description: "Cu unitate, ex. „1.250 lei”" }, nota: { type: "string" } },
+            required: ["eticheta", "valoare"],
+          },
+        },
+        progres: {
+          type: "array",
+          description: "Bare de progres: cât s-a făcut din țintă",
+          items: {
+            type: "object",
+            properties: { eticheta: { type: "string" }, valoare: { type: "number" }, maxim: { type: "number" }, unitate: { type: "string" } },
+            required: ["eticheta", "valoare", "maxim"],
+          },
+        },
+        bare: {
+          type: "object",
+          description: "Grafic cu bare; cu valoare2 devine comparație (ex. luna asta vs. luna trecută)",
+          properties: {
+            titlu: { type: "string" },
+            unitate: { type: "string" },
+            legenda: { type: "array", items: { type: "string" }, description: "Numele celor două serii, dacă e comparație" },
+            elemente: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { eticheta: { type: "string" }, valoare: { type: "number" }, valoare2: { type: "number" } },
+                required: ["eticheta", "valoare"],
+              },
+            },
+          },
+          required: ["elemente"],
+        },
+        linie: {
+          type: "object",
+          description: "Evoluție în timp, cel mult 3 serii",
+          properties: {
+            titlu: { type: "string" },
+            unitate: { type: "string" },
+            etichete: { type: "array", items: { type: "string" }, description: "Axa de jos, ex. lunile" },
+            serii: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { nume: { type: "string" }, valori: { type: "array", items: { type: "number" } } },
+                required: ["nume", "valori"],
+              },
+            },
+          },
+          required: ["etichete", "serii"],
+        },
+        tabel: { type: "array", items: { type: "array", items: { type: "string" } }, description: "Primul rând e capul de tabel" },
+        imagine: { type: "string", description: "Link https către o imagine, opțional" },
       },
       required: ["titlu"],
     },

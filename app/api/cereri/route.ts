@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { firstSentence, markOpen, notify } from "@/lib/push";
 import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, type Cerere, type Status } from "@/lib/cereri";
+import { cleanVizual } from "@/lib/vizual";
 
 // Cererile pentru Claude de pe laptop. Telefonul și laptopul sunt logate amândouă cu codul lui Daniel.
 
@@ -93,6 +94,7 @@ export async function PATCH(request: Request) {
       rezultat: body.rezultat !== undefined ? String(body.rezultat).slice(0, 8000) : current.rezultat,
       confirmare: body.status === "așteaptă confirmare" ? body.confirmare : current.confirmare,
       sesiune: body.sesiune ?? current.sesiune,
+      vizual: body.status === "gata" ? cleanVizual(body.vizual) : current.vizual,
     };
     await saveCerere(updated);
     if (updated.status === "gata") await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);

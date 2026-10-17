@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Vizual } from "@/lib/vizual";
 import type { Module } from "./orb";
+import Visual from "./visual";
 
 // `module` leagă fereastra de cuvântul ei de pe sferă (AGENDA, SARCINI, BUGET, GMAIL).
 export type Card = { module?: Module } & (
-  | { id: string; kind: "summary"; title: string; text?: string; points?: string[]; table?: string[][] }
+  | { id: string; kind: "summary"; title: string; text?: string; points?: string[]; table?: string[][]; vizual?: Vizual }
   | { id: string; kind: "list"; title: string; items: string[] }
   | { id: string; kind: "confirm"; title: string; details: string; recipient?: string; table?: string[][] }
 );
@@ -103,6 +105,7 @@ export default function CardStack({
           {card.kind === "summary" && (
             <>
               {card.text && <p className="card-text">{card.text}</p>}
+              {card.vizual && <Visual data={card.vizual} />}
               {card.table && <Table rows={card.table} />}
               {card.points && card.points.length > 0 && (
                 <ul className="card-points">

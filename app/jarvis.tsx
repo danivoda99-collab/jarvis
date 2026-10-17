@@ -8,6 +8,7 @@ import Orb, { type Module, type OrbHandle } from "./orb";
 import WindowLinks from "./links";
 import { blipSound, bootSound } from "./sounds";
 import type { Cerere } from "@/lib/cereri";
+import { budgetVizual, cleanVizual } from "@/lib/vizual";
 import {
   canListen,
   chooseVoice,
@@ -325,6 +326,22 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       });
       return "Rezumatul e afișat pe ecran.";
     },
+    // Grafice, bare de progres, cifre mari, tabele sau o imagine, după ce cere Daniel.
+    arata_vizual: (parameters: { titlu?: unknown; text?: unknown; modul?: unknown } & Record<string, unknown>) => {
+      const title = asText(parameters.titlu) || "Rezumat";
+      const text = asText(parameters.text);
+      const vizual = cleanVizual(parameters);
+      if (!vizual) return "Eroare: n-am primit date de afișat (cifre, progres, bare, linie, tabel sau imagine).";
+      addCard({
+        id: crypto.randomUUID(),
+        kind: "summary",
+        title,
+        text,
+        vizual,
+        module: asModule(parameters.modul) ?? guessModule(title, text),
+      });
+      return "Fereastra cu graficul e pe ecran.";
+    },
     arata_lista: (parameters: { titlu?: unknown; elemente?: unknown; modul?: unknown }) => {
       const title = asText(parameters.titlu) || "Listă";
       const items = asList(parameters.elemente);
@@ -446,15 +463,18 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       if (raw.startsWith("Eroare")) return raw;
       const data = JSON.parse(raw) as { luna?: string; tabel?: string[][] };
       if (data.tabel && data.tabel.length > 1) {
+        // Bare de progres pe fiecare categorie (cele aproape de limită sus); tabelul doar dacă nu se pot citi cifrele.
+        const vizual = budgetVizual(data.tabel);
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
           title: `Buget ${data.luna ?? ""}`.trim(),
-          table: data.tabel,
+          vizual,
+          table: vizual ? undefined : data.tabel,
           module: "buget",
         });
       }
-      return `${raw}\nTabelul e pe ecran. Spune pe scurt totalul și ce categorii au depășit bugetul.`;
+      return `${raw}\nBarele de progres sunt pe ecran. Spune pe scurt totalul și ce categorii au depășit bugetul.`;
     },
     buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
       const amount = String(parameters.suma ?? "").trim();
@@ -597,7 +617,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         }
         if ((item.status === "gata" || item.status === "eroare") && item.actualizat > seen) {
           const title = item.status === "gata" ? `Claude a terminat: ${item.titlu}` : `Claude n-a reușit: ${item.titlu}`;
-          addCard({ id: crypto.randomUUID(), kind: "summary", title, text: item.rezultat || "" });
+          addCard({ id: crypto.randomUUID(), kind: "summary", title, text: item.rezultat || "", vizual: item.vizual });
           log("agent", title);
           // Prima propoziție din rezultat („Trimis lui Jess pe WhatsApp.”) se spune cu voce;
           // la o cercetare, tot primul paragraf, care e răspunsul.
