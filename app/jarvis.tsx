@@ -456,6 +456,36 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       });
       return shown(result, "Modificat în to-do", details, "sarcini");
     },
+    // Gmail, Contacte, Drive: doar citire, direct din aplicație (fără laptop).
+    mail_citeste: async (parameters: { cauta?: unknown; max?: unknown }) => {
+      const query = new URLSearchParams();
+      if (asText(parameters.cauta)) query.set("cauta", asText(parameters.cauta));
+      if (typeof parameters.max === "number") query.set("max", String(parameters.max));
+      const raw = await callApi(`/api/mail?${query}`);
+      if (raw.startsWith("Eroare")) return raw;
+      const { mailuri = [] } = JSON.parse(raw) as { mailuri?: { de_la: string; subiect: string; data: string; necitit: boolean }[] };
+      if (mailuri.length) {
+        const sender = (from: string) => from.replace(/<[^>]*>/g, "").replace(/"/g, "").trim() || from;
+        const when = (date: string) => {
+          const value = new Date(date);
+          return Number.isNaN(value.getTime())
+            ? ""
+            : value.toLocaleString("ro-RO", { timeZone: "Europe/Bucharest", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+        };
+        addCard({
+          id: crypto.randomUUID(),
+          kind: "summary",
+          title: `Mailuri (${mailuri.length})`,
+          table: [["De la", "Subiect", "Când"], ...mailuri.slice(0, 8).map((mail) => [`${mail.necitit ? "● " : ""}${sender(mail.de_la)}`, mail.subiect, when(mail.data)])],
+          module: "gmail",
+        });
+      }
+      return raw;
+    },
+    mail_deschide: (parameters: { id?: unknown }) => callApi(`/api/mail?id=${encodeURIComponent(asText(parameters.id))}`),
+    contacte_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/contacte?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
+    fisiere_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/fisiere?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
+    fisier_citeste: (parameters: { id?: unknown }) => callApi(`/api/fisiere?id=${encodeURIComponent(asText(parameters.id))}`),
     buget_categorii: () => callApi("/api/buget"),
     // Cât s-a cheltuit luna asta pe fiecare categorie, față de buget: tabel pe ecran, rezumat cu voce.
     buget_situatie: async () => {

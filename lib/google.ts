@@ -7,6 +7,11 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/tasks",
   "https://www.googleapis.com/auth/spreadsheets",
+  // Doar citire (aprobat de Daniel pe 17.10.2026): mailuri, contacte, fișiere din Drive.
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/contacts.readonly",
+  "https://www.googleapis.com/auth/contacts.other.readonly",
+  "https://www.googleapis.com/auth/drive.readonly",
 ];
 
 function secretKey(): Buffer {
@@ -107,7 +112,8 @@ export async function google<T>(url: string, init: RequestInit = {}): Promise<T>
   if (!response.ok) {
     throw new GoogleError(`Google a răspuns cu ${response.status}.`);
   }
-  return (response.status === 204 ? null : await response.json()) as T;
+  if (response.status === 204) return null as T;
+  return ((response.headers.get("content-type") ?? "").includes("json") ? await response.json() : await response.text()) as T;
 }
 
 // Ora României pentru o dată locală „2026-10-15T10:00”, ca RFC 3339 cu fus orar.

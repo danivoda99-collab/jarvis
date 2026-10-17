@@ -89,7 +89,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 3. Nu ceri, nu scrii și nu salvezi parole, coduri sau numere de card.
 4. Nu lucrezi cu date personale ale clienților OVB. Doar cifre agregate și date despre echipă.
 5. Ștergi doar când Daniel cere asta explicit, și numai după „Da”: pui CONFIRMARE cu lista exactă a ce urmează să ștergi (mailuri, fișiere, evenimente, rânduri). Preferi mereu Coșul (Gmail, Drive, Calendar), nu ștergerea definitivă. Fișierele de pe laptop nu le ștergi niciodată; dacă Daniel vrea asta, îi spui să le șteargă el.
-6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul) îl citești doar, nu scrii niciodată în el.
+6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul): scrii doar în taburile Raportari și Teluri, doar ce a cerut Daniel și doar după „Da” (aprobat de Daniel pe 17.10.2026). În celelalte taburi nu scrii niciodată.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
 9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, lucrezi cât mai repede, cu cât mai puțini pași: (1) folosești tabul tău web.whatsapp.com, deja încărcat (îl deschizi doar dacă lipsește); nu navighezi, nu reîncarci și NU închizi niciodată acest tab, ca următoarea trimitere să-l găsească gata; (2) doar cu tastatura, fără „find”, fără capturi și fără click după coordonate: apeși Ctrl+Alt+/ (căutarea din WhatsApp Web), scrii exact numele din confirmare, aștepți o secundă și apeși Enter ca să deschizi primul rezultat; mesajul îl scrii direct, cursorul e deja în caseta de mesaj; (3) un singur get_page_text ca să verifici că antetul conversației e exact numele confirmat (dacă nu e, nu trimiți și spui de ce); (4) scrii textul confirmat, fără nicio schimbare, și apeși Enter; (5) fără capturi de ecran: verifici cu get_page_text că ultimul mesaj e cel trimis. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci.
@@ -111,7 +111,11 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
 - Nu deschizi tabul „Inchideri”, „Service”, „_Service date” și nici fișiere cu clienți: au date de clienți. Lucrezi doar cu cifre pe consultant și totaluri.
 - „Cum stă echipa”, „raport echipă”: citești doar rândurile perioadei cerute (implicit săptămâna curentă, de sâmbătă), aduni pe consultant și compari cu Teluri. Rezumatul: totalul echipei, cine e peste obiectiv, cine e în urmă, cine n-a raportat. Pui VIZUAL cu „cifre” (totaluri), „progres” (analize și consultanțe față de obiectivul echipei), „bare” (consultanții, cu valoare2 = obiectivul sau săptămâna trecută) și un „tabel” scurt (Nume | Analize | Consultanțe | Semnate).
 - „Cum stă X”: același lucru pentru o singură persoană, cu ultimele 4 săptămâni ca „linie”.
-- Nu scrii nimic în centralizator (nici raportări, nici obiective). Dacă Daniel cere să completezi ceva acolo, pregătești exact rândurile ca tabel și spui că scrierea în centralizator nu e încă permisă.
+- Completări cerute de Daniel („trece-i lui Stan 3 analize azi”, „obiectiv 5 consultanțe pentru Gabriela săptămâna asta”), doar în Raportari și Teluri:
+  1. Citești întâi rândurile existente ale persoanei (ultimele 2-3) și copiezi exact formatul lor: Cheie luna („L2026-10-01”), Saptamana, Pozitie, Echipa (tab), datele „zz.ll.aaaa”. Numele exact îl iei din _ConfigEchipa.
+  2. Dacă persoana are deja rând pe acea zi (în Raportari) sau pe acea săptămână (în Teluri), îl corectezi pe acela, nu adaugi altul: în Raportari pui Stare „CORECTAT”, „Modificat la” = acum și adaugi la „Istoric corecturi” „zz.ll hh:mm: Analiza 2→3” (fără să ștergi ce era). Altfel scrii un rând nou pe primul rând gol, cu update_values (nu append_values), cu „Trimis la” = acum și, în Teluri, „Setat de” = „BL”.
+  3. Înainte să scrii pui CONFIRMARE cu titlul scurt („Trec 3 analize pentru Stan Adrian, azi”) și „tabel” cu exact rândul sau celulele care se schimbă (vechi → nou). Scrii doar după „Da”, exact acel lucru, apoi verifici citind rândul înapoi.
+  4. Nu ștergi rânduri, nu atingi formule și nu scrii în niciun alt tab. Dacă nu e clar cine, ce zi sau ce cifră, nu scrii și întrebi prin CONFIRMARE.
 Dacă o cerere încalcă o regulă, nu o faci și explici scurt de ce.`;
 
 function loadConfig() {
@@ -392,11 +396,21 @@ function splitVisual(text) {
   }
 }
 
+// Când s-a terminat limita Claude, treburile automate (urmăriri, pregătiri) stau o oră, ca să nu consume și să nu umple jurnalul.
+const LIMIT = /usage limit|limit reached|hit your limit|out of (extra )?usage|credit balance|quota/i;
+let limitUntil = 0;
+function noteLimit(text) {
+  if (LIMIT.test(String(text || "")) && Date.now() > limitUntil) {
+    limitUntil = Date.now() + 60 * 60_000;
+    log("Limita Claude s-a terminat: opresc treburile automate o oră.");
+  }
+}
+
 // Erorile tehnice devin o propoziție pe care Daniel o poate auzi; detaliul rămâne în argus.log.
 const TRANSIENT = /overloaded|\b529\b|\b429\b|rate.?limit|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|fetch failed|\b50[0234]\b/i;
 function friendly(text) {
   const raw = String(text || "");
-  if (/usage limit|limit reached|hit your limit|out of (extra )?usage|credit balance|billing|quota/i.test(raw)) {
+  if (LIMIT.test(raw) || /billing/i.test(raw)) {
     const reset = raw.match(/resets?\s+(?:at\s+)?([^\n.·|(]{1,30})/i)?.[1]?.trim();
     return `S-a terminat limita Claude de pe laptop${reset ? ` (revine ${reset})` : ""}. Cererea n-a pornit; cere-o din nou după.`;
   }
@@ -476,6 +490,7 @@ async function handle(config, cerere) {
     run = await runWarm(config, full, options);
   }
   if (!run.ok) {
+    noteLimit(run.text);
     await report(config, { id: cerere.id, status: "eroare", rezultat: friendly(run.text) });
     log("Eroare:", cerere.titlu, "—", (run.text || "").slice(0, 300));
     return;
@@ -562,6 +577,7 @@ async function checkWatchers(config) {
       .filter(Boolean)
       .join("\n\n"),
   );
+  if (!run.ok) noteLimit(run.text);
   const { head, rest } = firstLine(run.text || "");
   if (run.ok && head === "DA") {
     await api(config, "POST", { titlu: `Urmărire: ${due.ce.slice(0, 80)}`, cerere: `${due.ce} — ${due.conditie}`, rezultat: rest || "Condiția e îndeplinită." });
@@ -593,14 +609,17 @@ async function prepareMeetings(config) {
       `Acum e ${new Date().toISOString()}. Citește din Google Calendar evenimentele lui Daniel din următoarele 30 de ore. Păstrează doar întâlnirile cu alți oameni (au participanți, link de video sau sunt clar o întâlnire), nu reminderele și nu blocurile personale. Răspunde DOAR cu un JSON pe un rând: [{"id":"<id eveniment>","titlu":"<titlu>","inceput":"<ISO cu fus orar>"}], sau [] dacă nu e nimic.`,
     );
     const match = (run.text || "").match(/\[[\s\S]*\]/);
+    // Dacă n-a mers (limită, Google deconectat), nu reîncercăm la fiecare minut: următoarea încercare peste 30 de minute.
+    state.scanat = Date.now() - SCAN_EVERY_MS + 30 * 60_000;
     if (run.ok && match) {
       try {
         state.intalniri = JSON.parse(match[0]).filter((item) => item && item.id && item.inceput);
         state.scanat = Date.now();
       } catch {
-        // încercăm la următoarea trecere
+        // încercăm peste 30 de minute
       }
     }
+    if (!run.ok) noteLimit(run.text);
     savePreps(state);
   }
   const now = Date.now();
@@ -667,6 +686,7 @@ function runChores(config) {
     trimLanes();
     trimSendLane(config);
     await shareMemory(config).catch(() => {});
+    if (Date.now() < limitUntil) return;
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);
   })()
