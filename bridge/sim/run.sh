@@ -28,7 +28,7 @@ sleep 8
 add '{"titlu":"lent cu server căzut","cerere":"SIM_SLOW"}'
 sleep 1.5; curl -s "localhost:4999/sim/down?ms=6000" >/dev/null
 sleep 10
-add '{"titlu":"whatsapp citire","cerere":"rezumă-mi WhatsApp-ul SIM_OK"}'
+add '{"titlu":"whatsapp citire","cerere":"rezumă-mi WhatsApp-ul SIM_GATE_READ"}'
 add '{"titlu":"whatsapp pregătire","cerere":"trimite pe whatsapp lui Jess salut SIM_CONFIRM"}'
 sleep 8
 add '{"titlu":"trimitere 1","cerere":"x","status":"confirmată","confirmare":{"titlu":"Trimit lui Jess","text":"Salut","destinatar":"Jess"}}'
