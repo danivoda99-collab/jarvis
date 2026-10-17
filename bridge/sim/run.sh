@@ -11,6 +11,7 @@ sleep 0.5
 node b/argus-bridge.mjs --worker & BR=$!
 add() { curl -s -XPOST localhost:4999/sim/add -d "$1" >/dev/null; }
 sleep 4   # lanele speciale se încălzesc
+node --check b/argus-gate.mjs && echo "lacăt: sintaxă ok"
 add '{"titlu":"ok simplu","cerere":"SIM_OK fă ceva"}'
 sleep 6
 add '{"titlu":"grafic","cerere":"SIM_VIZ raport echipă"}'

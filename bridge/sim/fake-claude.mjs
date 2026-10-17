@@ -44,6 +44,7 @@ async function answer(content) {
   const has = (k) => content.includes(k);
   if (has("Pregătire, nu e o cerere")) { await sleep(1500); return { result: "gata" }; }
   if (has("Google Calendar evenimentele")) return { result: "[]" };
+  if (has("Verificare automată pentru alerte")) return { result: "ALERTA\n- mail:ana-contract | Ana îți cere contractul până mâine.\n- buget:mancare | Mâncarea e la 95% din buget.\nrând fără format" };
   if (has("SIM_CRASHALL") || (has("SIM_CRASH") && stream)) { process.stderr.write("Error: simulated crash\n"); note("crash"); process.exit(1); }
   if (has("SIM_HANG")) { note("hang"); await sleep(1e9); }
   if (has("SIM_LIMIT")) return { result: "Claude AI usage limit reached · resets 3am (Europe/Bucharest)", is_error: true };
@@ -58,7 +59,7 @@ async function answer(content) {
   if (has("SIM_VIZ")) return { result: 'Echipa e la 70%.\nVIZUAL: {"cifre": [{"eticheta": "Analize", "valoare": "14"}], "progres": [{"eticheta": "Analize", "valoare": 14, "maxim": 20}]}\nAtât.' };
   if (has("SIM_BADVIZ")) return { result: 'Gata.\nVIZUAL: {"cifre": [ broken' };
   if (has("a apăsat Da")) {
-    const gate = await askGate([[C, { action: "type", text: "Jess" }], [C, { action: "key", text: "Enter" }], [C, { action: "type", text: "Salut" }], [C, { action: "type", text: "Altceva" }], [C, { action: "key", text: "ctrl+v" }], ["mcp__claude_ai_Gmail__send_message", {}]]);
+    const gate = await askGate([[C, { action: "type", text: "Jess" }], [C, { action: "key", text: "Enter" }], [C, { action: "type", text: "Salut" }], [C, { action: "type", text: "Altceva" }], [C, { action: "type", text: "S" }], [C, { action: "type", text: "Jes" }], [C, { action: "key", text: "ctrl+v" }], ["mcp__claude_ai_Gmail__send_message", {}]]);
     note("gate-send", gate);
     return { result: "Trimis pe WhatsApp. Lacăt: " + gate };
   }
