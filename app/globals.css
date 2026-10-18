@@ -565,6 +565,29 @@ body {
   color: var(--ivory);
 }
 
+.card-rich {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-rich .card-points {
+  margin-top: 0;
+}
+
+.card-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.card-lead {
+  font-weight: 500;
+}
+
 .card-points {
   margin-top: 8px;
   padding-left: 18px;

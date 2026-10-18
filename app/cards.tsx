@@ -72,6 +72,60 @@ function Table({ rows }: { rows: string[][] }) {
   );
 }
 
+// Textul de la laptop vine cu rânduri, liste și uneori markdown: îl arătăm pe blocuri, nu ca un singur paragraf.
+// Cu un grafic sau tabel, primul paragraf stă deasupra lui, iar restul intră sub „Detalii”, închis.
+function RichText({ text, only }: { text: string; only?: "lead" | "rest" }) {
+  const clean = (line: string) => line.replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#+\s*/, "").trim();
+  const blocks: { list: boolean; lines: string[] }[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) {
+      blocks.push({ list: false, lines: [] });
+      continue;
+    }
+    const item = line.match(/^(?:[-•*]|\d+[.)])\s+(.*)$/);
+    const last = blocks[blocks.length - 1];
+    if (item) {
+      if (last?.list) last.lines.push(clean(item[1]));
+      else blocks.push({ list: true, lines: [clean(item[1])] });
+    } else if (last && !last.list && last.lines.length) last.lines.push(clean(line));
+    else blocks.push({ list: false, lines: [clean(line)] });
+  }
+  const shown = blocks.filter((block) => block.lines.length);
+  if (only === "rest" && shown.length < 2) return null;
+  const body = (
+    <div className="card-rich">
+      {(only === "lead" ? shown.slice(0, 1) : only === "rest" ? shown.slice(1) : shown)
+        .map((block, index) =>
+          block.list ? (
+            <ul key={index} className="card-points">
+              {block.lines.map((line, at) => (
+                <li key={at}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <p key={index} className={index === 0 && only !== "rest" ? "card-text card-lead" : "card-text"}>
+              {block.lines.map((line, at) => (
+                <span key={at}>
+                  {at > 0 && <br />}
+                  {line}
+                </span>
+              ))}
+            </p>
+          ),
+        )}
+    </div>
+  );
+  // Un rest scurt („Restul: 4 conversații fără nimic urgent.”) rămâne la vedere.
+  if (only !== "rest" || shown.slice(1).reduce((sum, block) => sum + block.lines.length, 0) <= 2) return body;
+  return (
+    <details className="card-more">
+      <summary>Detalii</summary>
+      {body}
+    </details>
+  );
+}
+
 export default function CardStack({
   cards,
   onClose,
@@ -104,8 +158,15 @@ export default function CardStack({
 
           {card.kind === "summary" && (
             <>
-              {card.text && <p className="card-text">{card.text}</p>}
-              {card.vizual && <Visual data={card.vizual} />}
+              {card.text && card.vizual ? (
+                <>
+                  <RichText text={card.text} only="lead" />
+                  <Visual data={card.vizual} />
+                  <RichText text={card.text} only="rest" />
+                </>
+              ) : (
+                card.text && <RichText text={card.text} />
+              )}
               {card.table && <Table rows={card.table} />}
               {card.points && card.points.length > 0 && (
                 <ul className="card-points">
