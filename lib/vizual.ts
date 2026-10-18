@@ -7,8 +7,11 @@ export type Bara = { eticheta: string; valoare: number; valoare2?: number };
 export type Bare = { titlu?: string; unitate?: string; legenda?: string[]; elemente: Bara[] };
 export type Serie = { nume: string; valori: number[] };
 export type Linie = { titlu?: string; unitate?: string; etichete: string[]; serii: Serie[] };
+export type Nivel = "urgent" | "important" | "info";
+export type Punct = { titlu: string; text?: string; nivel: Nivel };
 
 export type Vizual = {
+  puncte?: Punct[];
   cifre?: Cifra[];
   progres?: Progres[];
   bare?: Bare;
@@ -33,6 +36,20 @@ const record = (value: unknown): Record<string, unknown> =>
 export function cleanVizual(input: unknown): Vizual | undefined {
   const raw = record(input);
   const result: Vizual = {};
+
+  // Puncte una sub alta (o conversație, un mail, un om pe rând), cele urgente sus.
+  const ORDINE: Nivel[] = ["urgent", "important", "info"];
+  const puncte = list(raw.puncte, 8)
+    .map(record)
+    .map((item) => {
+      const nivel = text(item.nivel, 12).toLowerCase() as Nivel;
+      return { titlu: text(item.titlu, 40), text: text(item.text, 120) || undefined, nivel: ORDINE.includes(nivel) ? nivel : "info" };
+    })
+    .filter((item) => item.titlu)
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => ORDINE.indexOf(a.item.nivel) - ORDINE.indexOf(b.item.nivel) || a.index - b.index)
+    .map(({ item }) => item);
+  if (puncte.length) result.puncte = puncte;
 
   const cifre = list(raw.cifre, 6)
     .map(record)

@@ -1240,3 +1240,76 @@ body {
   border-radius: 10px;
   display: block;
 }
+
+/* Puncte una sub alta, după urgență: un punct colorat, numele, apoi ce e de făcut. */
+.viz-points {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.viz-point {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  animation: row-in 0.35s ease-out both;
+}
+
+.viz-point-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--ivory-muted);
+}
+
+.viz-point-urgent .viz-point-dot {
+  background: var(--flame);
+  box-shadow: 0 0 8px var(--flame);
+}
+
+.viz-point-important .viz-point-dot {
+  background: var(--gold);
+}
+
+.viz-point-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.viz-point-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 15px;
+}
+
+.viz-point-tag {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.viz-point-urgent .viz-point-tag {
+  color: var(--flame);
+}
+
+.viz-point-text {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ivory-muted);
+  overflow-wrap: anywhere;
+}
+
+.viz + .card-rich,
+.viz + .card-more {
+  margin-top: 12px;
+}
