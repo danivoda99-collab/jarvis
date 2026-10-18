@@ -331,7 +331,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
       const title = asText(parameters.titlu) || "Rezumat";
       const text = asText(parameters.text);
       const vizual = cleanVizual(parameters);
-      if (!vizual) return "Eroare: n-am primit date de afișat (cifre, progres, bare, linie, tabel sau imagine).";
+      if (!vizual) return "Eroare: n-am primit date de afișat (puncte, cifre, progres, bare, linie, tabel sau imagine).";
       addCard({
         id: crypto.randomUUID(),
         kind: "summary",
@@ -476,7 +476,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
           id: crypto.randomUUID(),
           kind: "summary",
           title: `Mailuri (${mailuri.length})`,
-          table: [["De la", "Subiect", "Când"], ...mailuri.slice(0, 8).map((mail) => [`${mail.necitit ? "● " : ""}${sender(mail.de_la)}`, mail.subiect, when(mail.data)])],
+          // Unul sub altul, necititele sus, ca pe telefon să nu stea coloanele înghesuite.
+          vizual: cleanVizual({
+            puncte: mailuri.slice(0, 8).map((mail) => ({
+              titlu: sender(mail.de_la),
+              text: [mail.subiect, when(mail.data)].filter(Boolean).join(" · "),
+              nivel: mail.necitit ? "important" : "info",
+            })),
+          }),
           module: "gmail",
         });
       }

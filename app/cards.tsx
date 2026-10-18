@@ -158,11 +158,11 @@ export default function CardStack({
 
           {card.kind === "summary" && (
             <>
-              {card.text && card.vizual ? (
+              {card.vizual ? (
                 <>
-                  <RichText text={card.text} only="lead" />
+                  {card.text && <RichText text={card.text} only="lead" />}
                   <Visual data={card.vizual} />
-                  <RichText text={card.text} only="rest" />
+                  {card.text && <RichText text={card.text} only="rest" />}
                 </>
               ) : (
                 card.text && <RichText text={card.text} />

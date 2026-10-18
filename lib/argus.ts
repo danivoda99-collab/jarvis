@@ -27,7 +27,7 @@ Daniel este Executive Sales Manager (BL) la OVB Allfinanz România. Firma lui se
 Daniel te vede într-o aplicație, așa că poți afișa ferestre:
 - arata_rezumat: când răspunsul are mai multe informații, spui pe scurt cu voce și pui detaliile în fereastră.
 - arata_lista: pentru liste, pași sau idei.
-- arata_vizual: când cifrele se văd mai bine decât se citesc: progres față de buget sau obiectiv (progres), comparații între oameni, categorii sau luni (bare), evoluții (linie), totaluri (cifre), tabele, imagini. „Cum stau cu…” înseamnă de obicei progres; „cum stă echipa” înseamnă tabel sau bare.
+- arata_vizual: când cifrele se văd mai bine decât se citesc: progres față de buget sau obiectiv (progres), comparații între oameni, categorii sau luni (bare), evoluții (linie), totaluri (cifre), liste de mesaje sau mailuri după urgență (puncte), tabele, imagini. „Cum stau cu…” înseamnă de obicei progres; „cum stă echipa” înseamnă tabel sau bare.
 - cere_confirmare: înainte de orice altă acțiune care schimbă ceva (trimite, modifică). Spui ce urmează să faci, apoi afișezi fereastra cu textul exact. Acționezi doar dacă Daniel a confirmat. Dacă a refuzat sau nu a răspuns, nu faci nimic.
 - inchide_ferestrele: când Daniel cere să le închizi.
 La arata_rezumat și arata_lista pui modulul (agenda, sarcini, buget, gmail) când fereastra ține de unul, ca să pornească din cuvântul lui de pe sferă.
@@ -182,13 +182,26 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
   {
     name: "arata_vizual",
     description:
-      "Afișează o fereastră cu grafice: cifre mari (cifre), bare de progres față de o țintă (progres), grafic cu bare sau comparație între două valori (bare), evoluție în timp (linie), tabel sau o imagine. Folosește când datele se înțeleg mai bine văzute: progres față de buget sau obiectiv, comparații între oameni sau luni, evoluții. Pui doar secțiunile potrivite. Spui pe scurt cu voce ce contează. Textele în română.",
+      "Afișează o fereastră cu grafice: puncte una sub alta după urgență (puncte: mesaje, mailuri, lucruri de făcut), cifre mari (cifre), bare de progres față de o țintă (progres), grafic cu bare sau comparație între două valori (bare), evoluție în timp (linie), tabel sau o imagine. Folosește când datele se înțeleg mai bine văzute: progres față de buget sau obiectiv, comparații între oameni sau luni, evoluții. Pui doar secțiunile potrivite. Spui pe scurt cu voce ce contează. Textele în română.",
     input_schema: {
       type: "object",
       properties: {
         titlu: { type: "string", description: "Titlu scurt, 2-5 cuvinte" },
         text: { type: "string", description: "O frază de concluzie, opțional" },
         modul: MODUL,
+        puncte: {
+          type: "array",
+          description: "Cel mult 8 puncte una sub alta, de ex. un mail sau o conversație pe rând; se ordonează singure: urgent, important, info",
+          items: {
+            type: "object",
+            properties: {
+              titlu: { type: "string", description: "Cine sau ce, 1-4 cuvinte" },
+              text: { type: "string", description: "Ce vrea sau ce e de făcut, o frază scurtă" },
+              nivel: { type: "string", enum: ["urgent", "important", "info"] },
+            },
+            required: ["titlu", "nivel"],
+          },
+        },
         cifre: {
           type: "array",
           description: "Cel mult 6 cifre mari, de ex. total, rămas",

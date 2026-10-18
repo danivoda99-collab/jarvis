@@ -8,6 +8,27 @@ const SERIES = ["var(--flame)", "var(--gold)", "var(--ivory-muted)"];
 const format = (value: number) =>
   Math.abs(value) >= 1000 ? Math.round(value).toLocaleString("ro-RO") : String(Math.round(value * 10) / 10).replace(".", ",");
 
+const NIVEL = { urgent: "Urgent", important: "De răspuns", info: "Info" } as const;
+
+function Points({ items }: { items: NonNullable<Vizual["puncte"]> }) {
+  return (
+    <ul className="viz-points">
+      {items.map((item, index) => (
+        <li key={index} className={`viz-point viz-point-${item.nivel}`}>
+          <i className="viz-point-dot" aria-hidden />
+          <div className="viz-point-body">
+            <div className="viz-point-head">
+              <strong>{item.titlu}</strong>
+              {item.nivel !== "info" && <span className="viz-point-tag">{NIVEL[item.nivel]}</span>}
+            </div>
+            {item.text && <span className="viz-point-text">{item.text}</span>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Tiles({ items }: { items: NonNullable<Vizual["cifre"]> }) {
   return (
     <div className="viz-tiles">
@@ -174,6 +195,7 @@ function Table({ rows }: { rows: string[][] }) {
 export default function Visual({ data }: { data: Vizual }) {
   return (
     <div className="viz">
+      {data.puncte && <Points items={data.puncte} />}
       {data.cifre && <Tiles items={data.cifre} />}
       {data.progres && <ProgressBars items={data.progres} />}
       {data.bare && <Bars data={data.bare} />}
