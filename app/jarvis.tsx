@@ -148,18 +148,37 @@ function nowLine() {
   return `[Acum: ${date} (${iso}), ora ${time}, ora României]`;
 }
 
+// Pe iPhone, aplicația pusă deoparte își îngheață cronometrele și ceasul rămânea la ora de atunci:
+// îl aducem la zi imediat ce aplicația revine în față, iar cronometrul pornește din nou de fiecare dată.
 function useClock() {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | undefined;
+    const tick = () => setNow(new Date());
+    const start = () => {
+      tick();
+      if (id) clearInterval(id);
+      id = setInterval(tick, 1000);
+    };
+    const wake = () => {
+      if (document.visibilityState === "visible") start();
+    };
+    start();
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", start);
+    window.addEventListener("pageshow", start);
+    return () => {
+      if (id) clearInterval(id);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", start);
+      window.removeEventListener("pageshow", start);
+    };
   }, []);
   return now;
 }
 
 function timeOf(date: Date) {
-  return date.toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString("ro-RO", { timeZone: "Europe/Bucharest", hour: "2-digit", minute: "2-digit" });
 }
 
 function asText(value: unknown): string {
@@ -1294,7 +1313,7 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         <div className="clock" suppressHydrationWarning>
           <span className="clock-time">{now ? timeOf(now) : "--:--"}</span>
           <span className="clock-date">
-            {now ? now.toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long" }) : ""}
+            {now ? now.toLocaleDateString("ro-RO", { timeZone: "Europe/Bucharest", weekday: "long", day: "numeric", month: "long" }) : ""}
           </span>
         </div>
       </header>
