@@ -127,3 +127,30 @@ export function budgetVizual(table: string[][]): Vizual | undefined {
     : undefined;
   return cleanVizual({ cifre, progres });
 }
+
+// Rezerva pentru un rezultat de pe laptop venit fără VIZUAL (punte veche sau model neatent): liniile „- Nume: ce vrea”
+// devin puncte una sub alta, iar textul rămâne doar cu propozițiile din afara listei.
+const URGENT = /\burgent|\bazi\b|\bacum\b|imediat|până la|deadline/i;
+const IMPORTANT = /răspun|întreab|te sun|sună|vrea|cere|confirm|aștepți|necitit/i;
+
+export function pointsFromText(text: string): { text: string; vizual: Vizual } | undefined {
+  const lines = text.split("\n");
+  const items = lines
+    .map((line) => line.trim().match(/^(?:[-•*]|\d+[.)])\s+(.+)$/)?.[1])
+    .filter((item): item is string => Boolean(item));
+  if (items.length < 2) return undefined;
+  const puncte = items.map((item) => {
+    const plain = item.replace(/\*\*(.+?)\*\*/g, "$1").trim();
+    const split = plain.match(/^(.{1,40}?)\s*(?::|—|–|\s-\s)\s*(.+)$/);
+    const nivel = URGENT.test(plain) ? "urgent" : IMPORTANT.test(plain) ? "important" : "info";
+    return split ? { titlu: split[1], text: split[2], nivel } : { titlu: plain.slice(0, 40), text: plain.length > 40 ? plain : undefined, nivel };
+  });
+  const vizual = cleanVizual({ puncte });
+  if (!vizual) return undefined;
+  const rest = lines
+    .filter((line) => !/^\s*(?:[-•*]|\d+[.)])\s+/.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { text: rest, vizual };
+}
