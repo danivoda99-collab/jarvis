@@ -575,6 +575,15 @@ body {
   margin-top: 0;
 }
 
+.card-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
 .card-lead {
   font-weight: 500;
 }
