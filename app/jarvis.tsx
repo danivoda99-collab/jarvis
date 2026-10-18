@@ -727,6 +727,33 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
   const phaseRef = useRef<Phase>("idle");
   const activeRef = useRef(false); // conversația e pornită
   const historyRef = useRef<Message[]>([]);
+
+  // Aplicația instalată pe iPhone rămâne deschisă zile întregi cu codul vechi. Când revine în față și pe server
+  // e o versiune nouă, se reîncarcă singură, dar doar când Argus nu vorbește și nu ascultă.
+  useEffect(() => {
+    let base = "";
+    const check = async () => {
+      try {
+        const response = await fetch("/api/versiune", { cache: "no-store" });
+        const { versiune } = (await response.json()) as { versiune?: string };
+        if (!versiune) return;
+        if (!base) base = versiune;
+        else if (versiune !== base && !activeRef.current && document.visibilityState === "visible") window.location.reload();
+      } catch {
+        // fără rețea: verificăm data viitoare
+      }
+    };
+    void check();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const id = setInterval(check, 10 * 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(id);
+    };
+  }, []);
   const stopListenRef = useRef<() => void>(() => {});
   const listenGenRef = useRef(0); // fiecare ascultare nouă o anulează pe cea veche
   const quietRef = useRef(0);
