@@ -8,7 +8,7 @@ import Orb, { type Module, type OrbHandle } from "./orb";
 import WindowLinks from "./links";
 import { blipSound, bootSound } from "./sounds";
 import type { Cerere } from "@/lib/cereri";
-import { budgetVizual, cleanVizual } from "@/lib/vizual";
+import { budgetVizual, cleanVizual, pointsFromText } from "@/lib/vizual";
 import {
   canListen,
   chooseVoice,
@@ -673,7 +673,14 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         }
         if ((item.status === "gata" || item.status === "eroare") && item.actualizat > seen) {
           const title = item.status === "gata" ? `Claude a terminat: ${item.titlu}` : `Claude n-a reușit: ${item.titlu}`;
-          addCard({ id: crypto.randomUUID(), kind: "summary", title, text: item.rezultat || "", vizual: item.vizual });
+          const shaped = !item.vizual && item.status === "gata" ? pointsFromText(item.rezultat || "") : undefined;
+          addCard({
+            id: crypto.randomUUID(),
+            kind: "summary",
+            title,
+            text: shaped ? shaped.text : item.rezultat || "",
+            vizual: shaped ? shaped.vizual : item.vizual,
+          });
           log("agent", title);
           // Prima propoziție din rezultat („Trimis lui Jess pe WhatsApp.”) se spune cu voce;
           // la o cercetare, tot primul paragraf, care e răspunsul.
