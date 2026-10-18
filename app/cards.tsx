@@ -72,6 +72,50 @@ function Table({ rows }: { rows: string[][] }) {
   );
 }
 
+// Textul de la laptop vine cu rânduri, liste și uneori markdown: îl arătăm pe blocuri, nu ca un singur paragraf.
+function RichText({ text }: { text: string }) {
+  const clean = (line: string) => line.replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#+\s*/, "").trim();
+  const blocks: { list: boolean; lines: string[] }[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) {
+      blocks.push({ list: false, lines: [] });
+      continue;
+    }
+    const item = line.match(/^(?:[-•*]|\d+[.)])\s+(.*)$/);
+    const last = blocks[blocks.length - 1];
+    if (item) {
+      if (last?.list) last.lines.push(clean(item[1]));
+      else blocks.push({ list: true, lines: [clean(item[1])] });
+    } else if (last && !last.list && last.lines.length) last.lines.push(clean(line));
+    else blocks.push({ list: false, lines: [clean(line)] });
+  }
+  return (
+    <div className="card-rich">
+      {blocks
+        .filter((block) => block.lines.length)
+        .map((block, index) =>
+          block.list ? (
+            <ul key={index} className="card-points">
+              {block.lines.map((line, at) => (
+                <li key={at}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <p key={index} className={index === 0 ? "card-text card-lead" : "card-text"}>
+              {block.lines.map((line, at) => (
+                <span key={at}>
+                  {at > 0 && <br />}
+                  {line}
+                </span>
+              ))}
+            </p>
+          ),
+        )}
+    </div>
+  );
+}
+
 export default function CardStack({
   cards,
   onClose,
@@ -104,7 +148,7 @@ export default function CardStack({
 
           {card.kind === "summary" && (
             <>
-              {card.text && <p className="card-text">{card.text}</p>}
+              {card.text && <RichText text={card.text} />}
               {card.vizual && <Visual data={card.vizual} />}
               {card.table && <Table rows={card.table} />}
               {card.points && card.points.length > 0 && (

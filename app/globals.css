@@ -565,6 +565,20 @@ body {
   color: var(--ivory);
 }
 
+.card-rich {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-rich .card-points {
+  margin-top: 0;
+}
+
+.card-lead {
+  font-weight: 500;
+}
+
 .card-points {
   margin-top: 8px;
   padding-left: 18px;
