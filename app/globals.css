@@ -1313,3 +1313,188 @@ body {
 .viz + .card-more {
   margin-top: 12px;
 }
+
+/* --- Modul mașină: ecran negru, un microfon mare, nimic de citit --- */
+.topbar .car-toggle {
+  margin-left: auto;
+  margin-right: 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  background: none;
+  border: 1px solid rgba(212, 166, 74, 0.45);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.topbar .car-toggle + .settings-toggle {
+  margin-left: 0;
+}
+
+.car {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: max(18px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background: #000;
+  color: var(--ivory);
+  text-align: center;
+  overflow: hidden;
+}
+
+.car-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.car-time {
+  font-size: clamp(44px, 14vw, 72px);
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.car-exit {
+  font-size: 14px;
+  color: var(--ivory-muted);
+  background: none;
+  border: 1px solid rgba(244, 236, 216, 0.25);
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.car-next {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.car-next-label {
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.car-next-title {
+  font-size: clamp(22px, 6vw, 30px);
+  overflow-wrap: anywhere;
+}
+
+.car-next-go {
+  font-size: 17px;
+  color: var(--ivory-muted);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  overflow-wrap: anywhere;
+}
+
+.car-mic {
+  width: min(62vw, 46vh, 300px);
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 106, 19, 0.5);
+  background: radial-gradient(circle, rgba(255, 106, 19, 0.18), rgba(255, 106, 19, 0.04) 70%);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+
+.car-mic svg {
+  width: 38%;
+  fill: var(--ivory);
+}
+
+.car-listening {
+  border-color: var(--flame);
+  box-shadow: 0 0 0 10px rgba(255, 106, 19, 0.12), 0 0 60px rgba(255, 106, 19, 0.45);
+  animation: car-pulse 1.6s ease-in-out infinite;
+}
+
+.car-speaking {
+  border-color: var(--gold);
+  box-shadow: 0 0 60px rgba(212, 166, 74, 0.4);
+}
+
+.car-thinking {
+  border-color: var(--gold);
+  opacity: 0.8;
+}
+
+@keyframes car-pulse {
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.car-status {
+  min-height: 2.6em;
+  font-size: clamp(18px, 5vw, 24px);
+  color: var(--ivory-muted);
+  overflow-wrap: anywhere;
+}
+
+.car-confirm {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 20px;
+}
+
+.car-confirm div {
+  display: flex;
+  gap: 12px;
+}
+
+.car-confirm button {
+  flex: 1;
+  padding: 18px;
+  font-size: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--gold);
+  background: none;
+  color: var(--ivory);
+  cursor: pointer;
+}
+
+.car-confirm button:first-child {
+  background: var(--flame-deep);
+  border-color: var(--flame);
+}
+
+.car-error {
+  color: var(--danger);
+  font-size: 16px;
+}
+
+.quickstart {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  border: none;
+  background: rgba(11, 11, 12, 0.88);
+  color: var(--gold);
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .car-listening {
+    animation: none;
+  }
+}

@@ -38,6 +38,7 @@ export async function GET(request: Request) {
       id: event.id,
       titlu: event.summary ?? "(fără titlu)",
       cand: event.start?.dateTime ? formatLocal(event.start.dateTime) : `${event.start?.date} (toată ziua)`,
+      inceput: event.start?.dateTime,
       pana_la: event.end?.dateTime ? formatLocal(event.end.dateTime) : undefined,
       loc: event.location,
     }));
