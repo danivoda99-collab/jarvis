@@ -759,7 +759,7 @@ async function checkAlerts(config) {
       `Acum e ${now}. Verificare automată pentru alerte; Daniel nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
       "Verifici, repede:",
       "1. Gmail: mailurile necitite din ultimele 3 ore. Important = un om real îi cere ceva lui Daniel, un termen azi sau mâine, ceva de la OVB sau de la echipă. Reclamele, newsletterele și notificările automate nu contează. Un mail de la un client OVB îl spui doar ca „mail de la un client”, fără nume sau detalii.",
-      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” care n-au niciun rând azi în „Raportari”): doar dacă e după ora 20, cine n-a raportat azi.",
+      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”): după ora 20, cine n-a raportat azi; oricând, cine n-a raportat nici în ultimele 2 zile lucrătoare (cheie echipa:2zile-<prenume>).",
       "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget.",
       `Ce a fost deja anunțat azi (nu repeta): ${state.trimise.filter((item) => item.zi === now.slice(0, 10)).map((item) => item.cheie).join(", ") || "nimic"}.`,
       "Respecți ce scrie în memorie.md despre alerte (de exemplu ce nu vrea Daniel să primească).",
@@ -820,8 +820,8 @@ async function weeklyReport(config) {
     config,
     [
       `Azi e ${day === "Sat" ? "sâmbătă" : "luni"}, ${today.date}. Raport automat de echipă pentru săptămâna trecută (sâmbătă–vineri); Daniel nu a cerut nimic acum. Doar citire: nu scrii și nu ștergi nimic.`,
-      "Citești din centralizator, ca la „cum stă echipa”, doar tabele cu date de echipă (Raportari, Teluri, _ConfigEchipa), niciodată Inchideri sau Service. Săptămâna trecută = sâmbăta–vinerea de dinainte; totalurile le calculezi din rândurile brute din Raportari (nu din „Raportari Saptamana”, care poate fi pe altă săptămână), obiectivele din Teluri pentru aceeași săptămână. Vrei: totalul echipei (analize, consultanțe, contracte) față de obiectiv, fiecare consultant față de obiectivul lui, primii 3 și cine n-a raportat deloc.",
-      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Săptămâna trecută echipa a făcut 42 de analize, 84% din obiectiv; Ana și Mihai sunt în urmă.”). Apoi rândul VIZUAL cu: „cifre” (totalurile), „progres” (echipa față de obiectiv), „bare” (consultanții, cu valoare2 = obiectivul) și „puncte” (cel mult 6: cine e în urmă sau n-a raportat = urgent, cine e aproape = important, cine a depășit = info; text = cifrele lui într-o frază). După rândul VIZUAL nu mai scrii nimic.",
+      "Citești din centralizator, ca la „cum stă echipa”, doar tabele cu date de echipă (Raportari, Teluri, _ConfigEchipa), niciodată Inchideri sau Service. Săptămâna trecută = sâmbăta–vinerea de dinainte; totalurile le calculezi din rândurile brute din Raportari (nu din „Raportari Saptamana”, care poate fi pe altă săptămână), obiectivele din Teluri pentru aceeași săptămână. Vrei: totalul echipei (analize, consultanțe, contracte) față de obiectiv, fiecare consultant față de obiectivul lui, primii 3 și cine n-a raportat deloc. Calculezi la fel și săptămâna dinainte, ca să compari (de exemplu „+6 analize față de săptămâna dinainte”).",
+      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Săptămâna trecută echipa a făcut 42 de analize, 84% din obiectiv, cu 6 mai multe decât săptămâna dinainte.”). Apoi rândul VIZUAL cu: „cifre” (totalurile, cu diferența față de săptămâna dinainte în eticheta scurtă, de ex. „Analize (+6)”), „progres” (echipa față de obiectiv), „bare” (consultanții, cu valoare2 = obiectivul) și „puncte” (cel mult 6: cine e în urmă sau n-a raportat = urgent, cine e aproape = important, cine a depășit = info; text = cifrele lui într-o frază). După rândul VIZUAL nu mai scrii nimic.",
     ].join("\n\n"),
   );
   if (!run.ok) {

@@ -64,6 +64,13 @@ export async function POST(request: Request) {
         error = await onDevice(call, "/me/player/play", { method: "PUT", body: JSON.stringify(payload) });
         text = `Pun ${describe(found)}.`;
       }
+    } else if (action === "pauza_daca_canta") {
+      // Modul mașină: muzica se oprește cât vorbești cu Argus și pornește la loc după.
+      const { data } = await call<Playing>("/me/player");
+      if (!data?.is_playing) return NextResponse.json({ ok: true, pauzat: false });
+      error = await onDevice(call, "/me/player/pause", { method: "PUT" });
+      if (error) return NextResponse.json({ error }, { status: 502 });
+      return NextResponse.json({ ok: true, pauzat: true });
     } else if (action === "pauza") {
       error = await onDevice(call, "/me/player/pause", { method: "PUT" });
       text = "Am oprit muzica.";
