@@ -136,8 +136,8 @@ function journal(sursa: string, cerere: string, rezultat: string) {
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
 
-export default function Jarvis({ googleConnected = false }: { googleConnected?: boolean }) {
-  return <Assistant googleConnected={googleConnected} />;
+export default function Jarvis({ googleConnected = false, spotifyConnected = false }: { googleConnected?: boolean; spotifyConnected?: boolean }) {
+  return <Assistant googleConnected={googleConnected} spotifyConnected={spotifyConnected} />;
 }
 
 function nowLine() {
@@ -229,7 +229,7 @@ function asModule(value: unknown): Module | undefined {
   return (["agenda", "sarcini", "buget", "gmail"] as const).find((module) => module === text);
 }
 
-function Assistant({ googleConnected }: { googleConnected: boolean }) {
+function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boolean; spotifyConnected: boolean }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const answers = useRef(new Map<string, (answer: Answer | "fără răspuns") => void>());
@@ -248,13 +248,23 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
 
   // Mesajul de după conectarea la Google (?google=conectat).
   useEffect(() => {
-    const result = new URLSearchParams(window.location.search).get("google");
-    if (!result) return;
-    setGoogleNotice(
-      result === "conectat"
-        ? "Google e conectat. Argus îți vede acum agenda și lista de to-do."
-        : "Conectarea la Google n-a mers. Mai încearcă.",
-    );
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("google");
+    const music = params.get("spotify");
+    if (!result && !music) return;
+    if (result) {
+      setGoogleNotice(
+        result === "conectat"
+          ? "Google e conectat. Argus îți vede acum agenda și lista de to-do."
+          : "Conectarea la Google n-a mers. Mai încearcă.",
+      );
+    } else {
+      setGoogleNotice(
+        music === "conectat"
+          ? "Spotify e conectat. Spune-i lui Argus „pune muzică” sau ce vrei să asculți."
+          : "Conectarea la Spotify n-a mers. Mai încearcă.",
+      );
+    }
     window.history.replaceState(null, "", "/");
   }, []);
 
@@ -511,6 +521,15 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
     mail_deschide: (parameters: { id?: unknown }) => callApi(`/api/mail?id=${encodeURIComponent(asText(parameters.id))}`),
     contacte_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/contacte?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
     fisiere_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/fisiere?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
+    spotify: (parameters: { actiune?: unknown; ce?: unknown; tip?: unknown; valoare?: unknown }) =>
+      asText(parameters.actiune) === "ce_canta"
+        ? callApi("/api/spotify")
+        : callApi("/api/spotify", "POST", {
+            actiune: asText(parameters.actiune),
+            ce: asText(parameters.ce),
+            tip: asText(parameters.tip) || undefined,
+            valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
+          }),
     fisier_citeste: (parameters: { id?: unknown }) => callApi(`/api/fisiere?id=${encodeURIComponent(asText(parameters.id))}`),
     buget_categorii: () => callApi("/api/buget"),
     // Cât s-a cheltuit luna asta pe fiecare categorie, față de buget: tabel pe ecran, rezumat cu voce.
@@ -1470,6 +1489,9 @@ function Assistant({ googleConnected }: { googleConnected: boolean }) {
         {pushState === "denied" && <p className="hint">Notificările sunt oprite din setările telefonului.</p>}
         <a className={googleConnected ? "connect connect-quiet" : "connect"} href="/api/google/connect">
           {googleConnected ? "Reconectează Google" : "Conectează Google (agendă, to-do, buget)"}
+        </a>
+        <a className={spotifyConnected ? "connect connect-quiet" : "connect"} href="/api/spotify/connect">
+          {spotifyConnected ? "Reconectează Spotify" : "Conectează Spotify (muzică)"}
         </a>
       </section>
 

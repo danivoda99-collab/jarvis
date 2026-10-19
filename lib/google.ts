@@ -28,7 +28,7 @@ export function sealToken(token: string): string {
   return Buffer.concat([iv, cipher.getAuthTag(), body]).toString("base64url");
 }
 
-function openToken(sealed: string): string | null {
+export function openToken(sealed: string): string | null {
   try {
     const raw = Buffer.from(sealed, "base64url");
     const decipher = createDecipheriv("aes-256-gcm", secretKey(), raw.subarray(0, 12));

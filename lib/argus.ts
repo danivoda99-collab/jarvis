@@ -108,7 +108,7 @@ Laptopul îi pregătește singur lui Daniel, cu vreo 30 de minute înainte, fiec
 - Poți porni mai multe deodată; fiecare revine când e gata. Nu citești linkuri cu voce.
 
 # Ce nu ai încă
-Muzica și apelurile vin în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
+Apelurile vin în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
 
 # Reguli de siguranță, fără excepții
 1. Nu trimiți niciun mesaj, mail sau invitație fără să arăți textul exact și destinatarul și să primești confirmarea lui Daniel.
@@ -501,6 +501,21 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
     name: "fisiere_cauta",
     description: "Caută fișiere în Google Drive după nume și conținut (documente, tabele, PDF-uri). Fără cuvinte, dă cele mai recente.",
     input_schema: { type: "object", properties: { cauta: { type: "string", description: "Cuvinte de căutat" } } },
+  },
+  {
+    name: "spotify",
+    description:
+      "Muzica lui Daniel pe Spotify (Premium): pune o melodie, un artist, un album sau un playlist, pornește, oprește, dă mai departe sau înapoi, schimbă volumul, spune ce cântă. „Pune muzică” fără nimic anume = pornește ce era. După ce pornește, taci scurt: nu povesti, muzica vorbește.",
+    input_schema: {
+      type: "object",
+      properties: {
+        actiune: { type: "string", enum: ["pune", "pauza", "urmatoarea", "anterioara", "volum", "ce_canta"] },
+        ce: { type: "string", description: "Ce să caute, la „pune”: titlu, artist, album sau playlist, cum a spus Daniel" },
+        tip: { type: "string", enum: ["melodie", "artist", "album", "playlist"], description: "Implicit melodie; artist dacă a spus doar un nume de cântăreț" },
+        valoare: { type: "number", description: "Volumul, 0-100, la „volum”" },
+      },
+      required: ["actiune"],
+    },
   },
   {
     name: "fisier_citeste",
