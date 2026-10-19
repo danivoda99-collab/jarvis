@@ -522,15 +522,18 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     mail_deschide: (parameters: { id?: unknown }) => callApi(`/api/mail?id=${encodeURIComponent(asText(parameters.id))}`),
     contacte_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/contacte?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
     fisiere_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/fisiere?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
-    spotify: (parameters: { actiune?: unknown; ce?: unknown; tip?: unknown; valoare?: unknown }) =>
-      asText(parameters.actiune) === "ce_canta"
+    spotify: (parameters: { actiune?: unknown; ce?: unknown; tip?: unknown; valoare?: unknown }) => {
+      // Daniel a cerut ceva anume de la muzică: nu o mai pornim singuri la final.
+      if (asText(parameters.actiune) !== "ce_canta") musicPausedRef.current = false;
+      return asText(parameters.actiune) === "ce_canta"
         ? callApi("/api/spotify")
         : callApi("/api/spotify", "POST", {
             actiune: asText(parameters.actiune),
             ce: asText(parameters.ce),
             tip: asText(parameters.tip) || undefined,
             valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
-          }),
+          });
+    },
     // Waze și apelurile pleacă din aplicație; iPhone-ul întreabă singur înainte de apel.
     navigheaza: (parameters: { destinatie?: unknown }) => {
       const place = asText(parameters.destinatie);
@@ -799,6 +802,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [language, setLanguage] = useState<Language>("en");
   // „La volan”: răspunsuri foarte scurte, totul cu vocea, nimic de citit.
   const [driving, setDriving] = useState(false);
+  const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
   // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
   const [quickStart, setQuickStart] = useState(false);
@@ -1241,6 +1245,15 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     }
     activeRef.current = true;
     silentRef.current = false;
+    if (drivingRef.current && spotifyConnected) {
+      musicPausedRef.current = false;
+      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pauza_daca_canta" }) })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { pauzat?: boolean } | null) => {
+          if (data?.pauzat) musicPausedRef.current = true;
+        })
+        .catch(() => {});
+    }
     historyRef.current = await fetchMemory();
     cleanRef.current = true;
     quietRef.current = 0;
@@ -1253,6 +1266,10 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   }
 
   function end() {
+    if (musicPausedRef.current) {
+      musicPausedRef.current = false;
+      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pune" }) }).catch(() => {});
+    }
     activeRef.current = false;
     stopListening();
     stopSpeaking();
