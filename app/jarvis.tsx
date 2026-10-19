@@ -534,6 +534,21 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
           });
     },
+    // Imaginea se face pe server (OpenAI) și apare direct într-o fereastră; pe iPhone se salvează ținând apăsat pe ea.
+    imagine_creeaza: async (parameters: { descriere?: unknown; format?: unknown; titlu?: unknown }) => {
+      const raw = await callApi("/api/imagine", "POST", { descriere: asText(parameters.descriere), format: asText(parameters.format) || undefined });
+      if (raw.startsWith("Eroare")) return raw;
+      const data = JSON.parse(raw) as { imagine?: string };
+      if (!data.imagine) return "Eroare: n-a venit nicio imagine.";
+      addCard({
+        id: crypto.randomUUID(),
+        kind: "summary",
+        title: asText(parameters.titlu) || "Imaginea ta",
+        text: "Ține apăsat pe imagine ca s-o salvezi în Poze.",
+        vizual: { imagine: data.imagine },
+      });
+      return "Imaginea e pe ecran. Spune doar, scurt, că e gata.";
+    },
     // Waze și apelurile pleacă din aplicație; iPhone-ul întreabă singur înainte de apel.
     navigheaza: (parameters: { destinatie?: unknown }) => {
       const place = asText(parameters.destinatie);

@@ -72,6 +72,26 @@ function Table({ rows }: { rows: string[][] }) {
   );
 }
 
+// Linkurile din text (un document în Drive, o pagină) se pot deschide cu o atingere; [titlu](url) devine „titlu”.
+function Linked({ line }: { line: string }) {
+  const parts: React.ReactNode[] = [];
+  const pattern = /\[([^\]]+)\]\((https:\/\/[^\s)]+)\)|(https:\/\/[^\s)]+)/g;
+  let last = 0;
+  for (const match of line.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (at > last) parts.push(line.slice(last, at));
+    const url = match[2] ?? match[3];
+    parts.push(
+      <a key={at} className="card-link" href={url} target="_blank" rel="noreferrer">
+        {match[1] ?? (url.includes("docs.google.com") || url.includes("drive.google.com") ? "Deschide în Drive" : "Deschide linkul")}
+      </a>,
+    );
+    last = at + match[0].length;
+  }
+  if (last < line.length) parts.push(line.slice(last));
+  return <>{parts}</>;
+}
+
 // Textul de la laptop vine cu rânduri, liste și uneori markdown: îl arătăm pe blocuri, nu ca un singur paragraf.
 // Cu un grafic sau tabel, primul paragraf stă deasupra lui, iar restul intră sub „Detalii”, închis.
 function RichText({ text, only }: { text: string; only?: "lead" | "rest" }) {
@@ -100,7 +120,9 @@ function RichText({ text, only }: { text: string; only?: "lead" | "rest" }) {
           block.list ? (
             <ul key={index} className="card-points">
               {block.lines.map((line, at) => (
-                <li key={at}>{line}</li>
+                <li key={at}>
+                  <Linked line={line} />
+                </li>
               ))}
             </ul>
           ) : (
@@ -108,7 +130,7 @@ function RichText({ text, only }: { text: string; only?: "lead" | "rest" }) {
               {block.lines.map((line, at) => (
                 <span key={at}>
                   {at > 0 && <br />}
-                  {line}
+                  <Linked line={line} />
                 </span>
               ))}
             </p>
