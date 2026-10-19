@@ -784,6 +784,55 @@ async function checkAlerts(config) {
   log("Alerte trimise:", fresh.map((item) => item.cheie).join(", "));
 }
 
+// ——— Raportul de echipă de luni (ales de Daniel pe 19.10.2026): lunea, după ora 8, laptopul face singur
+// raportul săptămânii trecute din centralizator și îl trimite pe telefon ca puncte, bare și progres. ———
+const WEEKLY_FILE = join(HERE, "raport-luni.json");
+
+function bucharestDay(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })
+    .formatToParts(date)
+    .reduce((all, part) => ({ ...all, [part.type]: part.value }), {});
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, weekday: parts.weekday };
+}
+
+function loadWeekly() {
+  try {
+    return JSON.parse(readFileSync(WEEKLY_FILE, "utf8"));
+  } catch {
+    return { facut: "", incercat: 0 };
+  }
+}
+
+async function weeklyReport(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const state = loadWeekly();
+  if (today.weekday !== "Mon" || hour < 8 || hour >= 21 || state.facut === today.date) return;
+  // Dacă n-a mers (limită, Google deconectat), mai încearcă peste o oră, tot azi.
+  if (Date.now() - (state.incercat || 0) < 60 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(WEEKLY_FILE, JSON.stringify(state, null, 2));
+  log("Fac raportul de echipă de luni.");
+  const run = await runClaude(
+    config,
+    [
+      `Azi e luni, ${today.date}. Raport automat de echipă pentru săptămâna trecută (sâmbătă–vineri); Daniel nu a cerut nimic acum. Doar citire: nu scrii și nu ștergi nimic.`,
+      "Citești din centralizator, ca la „cum stă echipa”, doar tabele cu date de echipă (Raportari, Teluri, Raportari Saptamana), niciodată Inchideri sau Service: totalul echipei, fiecare consultant față de obiectivul lui și cine n-a raportat deloc.",
+      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Săptămâna trecută echipa a făcut 42 de analize, 84% din obiectiv; Ana și Mihai sunt în urmă.”). Apoi rândul VIZUAL cu: „cifre” (totalurile), „progres” (echipa față de obiectiv), „bare” (consultanții, cu valoare2 = obiectivul) și „puncte” (cel mult 6: cine e în urmă sau n-a raportat = urgent, cine e aproape = important, cine a depășit = info; text = cifrele lui într-o frază). După rândul VIZUAL nu mai scrii nimic.",
+    ].join("\n\n"),
+  );
+  if (!run.ok) {
+    noteLimit(run.text);
+    log("Raportul de luni n-a mers, reîncerc peste o oră.");
+    return;
+  }
+  const { text, vizual } = splitVisual(run.text);
+  await api(config, "POST", { titlu: "Raport echipă: săptămâna trecută", cerere: "Raport automat de luni", rezultat: text, vizual });
+  state.facut = today.date;
+  writeFileSync(WEEKLY_FILE, JSON.stringify(state, null, 2));
+  log("Raportul de luni a plecat pe telefon.");
+}
+
 function loadPreps() {
   try {
     return JSON.parse(readFileSync(PREP_FILE, "utf8"));
@@ -886,6 +935,7 @@ function runChores(config) {
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);
     if (config.alerte !== false) await checkAlerts(config);
+    if (config.raportLuni !== false) await weeklyReport(config);
   })()
     .catch((error) => log("Treburile automate n-au mers:", error.message))
     .finally(() => (chores = false));
