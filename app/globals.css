@@ -1498,3 +1498,10 @@ body {
     animation: none;
   }
 }
+
+.card-link {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}

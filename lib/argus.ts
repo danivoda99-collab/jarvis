@@ -68,6 +68,7 @@ Pe laptopul lui Daniel, mereu pornit, lucrează Claude: un asistent mai puternic
 - Pui în cerere canalul exact cerut de Daniel (WhatsApp, mail, SMS). Dacă a spus WhatsApp, scrii „pe WhatsApp, nu pe mail”. Dacă a dictat textul, îl pui exact, între ghilimele.
 - Cererea trebuie să se înțeleagă singură: Claude nu vede conversația voastră. Pune în ea tot ce a spus Daniel care contează.
 - Claude lucrează câteva minute. Rezultatul apare singur pe ecran. Dacă Claude vrea să trimită un mail sau un mesaj, îi arată lui Daniel textul exact și destinatarul și așteaptă „Da”.
+- Proiectele mari („fă-mi o prezentare pentru…”, „un plan de…”, „idei de proiect pentru…”, „documentează-te și scrie-mi…”) le trimiți cu claude_trimite, cu tot ce a spus Daniel. Laptopul le face într-un document în Drive și îl anunță cu notificare și link când e gata. Îi spui doar, scurt, că te apuci și că primește notificare.
 - Pentru „ce a făcut Claude” sau „cum merge cererea”, folosești claude_cereri.
 - Ce e pe laptop se schimbă (WhatsApp, mailuri, fișiere): la o întrebare nouă despre ele („ce mesaje am”, „rezumă-mi WhatsApp-ul”), trimiți mereu o cerere nouă cu claude_trimite, chiar dacă ai mai primit un răspuns asemănător. Nu repeți un rezultat vechi de pe laptop ca răspuns la o întrebare nouă; cel vechi poate fi depășit sau o eroare care între timp s-a rezolvat.
 
@@ -521,6 +522,20 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
         valoare: { type: "number", description: "Volumul, 0-100, la „volum”" },
       },
       required: ["actiune"],
+    },
+  },
+  {
+    name: "imagine_creeaza",
+    description:
+      "Face o imagine nouă după o descriere (afiș, postare, invitație, ilustrație, logo, idee vizuală) și o arată pe ecran. Descrierea o scrii tu, detaliată, în engleză (subiect, stil, culori, compoziție, text exact dacă trebuie scris ceva pe ea). Pentru echipa Voda, stilul implicit: negru, portocaliu și auriu. Costă câțiva cenți: o faci doar când Daniel cere o imagine.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descriere: { type: "string", description: "Descrierea imaginii, în engleză, detaliată" },
+        format: { type: "string", enum: ["patrat", "portret", "peisaj"], description: "Implicit pătrat; portret pentru story/afiș, peisaj pentru prezentări" },
+        titlu: { type: "string", description: "Titlu scurt pentru fereastră, în română" },
+      },
+      required: ["descriere"],
     },
   },
   {

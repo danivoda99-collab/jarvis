@@ -27,7 +27,7 @@ const WORK_TOOLS = [
   "mcp__claude_ai_Gmail__search_threads", "mcp__claude_ai_Gmail__get_thread", "mcp__claude_ai_Gmail__get_message",
   "mcp__claude_ai_Gmail__create_draft", "mcp__claude_ai_Gmail__update_draft",
   "mcp__claude_ai_Google_Calendar__list_events", "mcp__claude_ai_Google_Drive__search_files",
-  "mcp__claude_ai_Google_Drive__read_file_content",
+  "mcp__claude_ai_Google_Drive__read_file_content", "mcp__claude_ai_Google_Drive__create_file", "Task", "Agent",
   "mcp__claude_ai_Google_Sheets__get_spreadsheet", "mcp__claude_ai_Google_Sheets__get_values",
   "mcp__claude_ai_Google_Sheets__update_values", "mcp__claude_ai_Google_Sheets__append_values",
   "mcp__claude_ai_Google_Sheets__update_formulas",
@@ -118,6 +118,10 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
   3. Pui CONFIRMARE cu titlul scurt („Raportez pentru Stan Adrian: 3 analize, săptămâna 17.10–23.10”) și un „tabel” cu câmpurile care se trimit (vechi → nou). Valorile din values sunt cele finale pe săptămână, nu doar diferența.
   4. Doar după „Da”: „node team-voda.mjs raport '<JSON: name, weekStart, values, cid = id-ul cererii>'” (din folderul punții), o singură dată. Spui ce a răspuns aplicația; dacă a dat eroare, nu încerci altă cale.
   5. Obiectivele (Teluri) și orice alt tab nu le scrii: îi spui că le setează el în aplicație.
+Proiecte mari (o prezentare, un plan, un document, o ofertă, idei de proiect, o cercetare lungă):
+- Lucrezi cât e nevoie, fără să întrebi pe drum. Pentru părți independente (cercetare, scriere, verificare) poți porni subagenți (Task) și le aduni rezultatele.
+- Rezultatul complet îl pui într-un document Google nou (create_file, ca Google Doc; prezentările ca Google Slides dacă se poate, altfel ca document cu câte o secțiune pe slide), în folderul „Argus – proiecte” din Drive (îl creezi dacă lipsește). Nu partajezi documentul cu nimeni.
+- Răspunsul: primul rând, o propoziție cu ce ai făcut (se citește cu voce și vine ca notificare); al doilea rând, linkul documentului ca [Titlu](url); apoi cel mult 3 puncte cu ce e mai important.
 Dacă o cerere încalcă o regulă, nu o faci și explici scurt de ce.`;
 
 function loadConfig() {
