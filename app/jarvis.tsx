@@ -135,6 +135,7 @@ function journal(sursa: string, cerere: string, rezultat: string) {
 }
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
+const DRIVING_QUIET_ROUNDS = 15; // în mașină ascultă mai mult (cam două minute) înainte să se oprească
 
 export default function Jarvis({ googleConnected = false, spotifyConnected = false }: { googleConnected?: boolean; spotifyConnected?: boolean }) {
   return <Assistant googleConnected={googleConnected} spotifyConnected={spotifyConnected} />;
@@ -530,6 +531,19 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             tip: asText(parameters.tip) || undefined,
             valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
           }),
+    // Waze și apelurile pleacă din aplicație; iPhone-ul întreabă singur înainte de apel.
+    navigheaza: (parameters: { destinatie?: unknown }) => {
+      const place = asText(parameters.destinatie);
+      if (!place) return "Lipsește destinația.";
+      setTimeout(() => window.location.assign(`https://waze.com/ul?q=${encodeURIComponent(place)}&navigate=yes`), 300);
+      return `Waze se deschide spre ${place}. Nu mai adăuga nimic.`;
+    },
+    suna: (parameters: { numar?: unknown; nume?: unknown }) => {
+      const number = asText(parameters.numar).replace(/[^\d+]/g, "");
+      if (number.replace(/\D/g, "").length < 6) return "Numărul nu pare bun. Caută-l cu contacte_cauta.";
+      setTimeout(() => window.location.assign(`tel:${number}`), 300);
+      return `Apelul către ${asText(parameters.nume) || number} pornește; iPhone-ul cere confirmarea. Nu mai adăuga nimic.`;
+    },
     fisier_citeste: (parameters: { id?: unknown }) => callApi(`/api/fisiere?id=${encodeURIComponent(asText(parameters.id))}`),
     buget_categorii: () => callApi("/api/buget"),
     // Cât s-a cheltuit luna asta pe fiecare categorie, față de buget: tabel pe ecran, rezumat cu voce.
@@ -786,14 +800,34 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   // „La volan”: răspunsuri foarte scurte, totul cu vocea, nimic de citit.
   const [driving, setDriving] = useState(false);
   const drivingRef = useRef(false);
+  // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
+  const [quickStart, setQuickStart] = useState(false);
   useEffect(() => {
+    let saved = false;
     try {
-      const saved = localStorage.getItem("argus-volan") === "1";
-      drivingRef.current = saved;
-      setDriving(saved);
+      saved = localStorage.getItem("argus-volan") === "1";
     } catch {
       // implicit oprit
     }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("masina") === "1" || params.get("mod") === "masina") {
+      saved = true;
+      try {
+        localStorage.setItem("argus-volan", "1");
+      } catch {
+        // rămâne doar pentru sesiunea asta
+      }
+    }
+    if (params.get("asculta") === "1") setQuickStart(true);
+    if (params.has("masina") || params.has("mod") || params.has("asculta")) {
+      params.delete("masina");
+      params.delete("mod");
+      params.delete("asculta");
+      const rest = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
+    }
+    drivingRef.current = saved;
+    setDriving(saved);
   }, []);
   function toggleDriving() {
     const next = !drivingRef.current;
@@ -1012,7 +1046,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         }
         if (phaseRef.current === "listening" || answers.current.size > 0) {
           quietRef.current += 1;
-          if (quietRef.current >= QUIET_ROUNDS && answers.current.size === 0) end();
+          if (quietRef.current >= (drivingRef.current ? DRIVING_QUIET_ROUNDS : QUIET_ROUNDS) && answers.current.size === 0) end();
           else setTimeout(listen, 150);
         }
       },
@@ -1236,6 +1270,70 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   }, [cards]);
 
   const connected = phase !== "idle";
+
+  // Modul mașină: ecranul rămâne aprins și vede următoarea întâlnire (azi sau mâine).
+  const [nextMeeting, setNextMeeting] = useState<{ id: string; titlu: string; inceput: string; loc?: string } | null>(null);
+  const warnedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!driving) return;
+    let lock: { release: () => Promise<void> } | null = null;
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+      nav.wakeLock
+        ?.request("screen")
+        .then((sentinel) => (lock = sentinel))
+        .catch(() => {});
+    };
+    const load = async () => {
+      if (!googleConnected) return;
+      const tomorrow = new Date(Date.now() + 86_400_000).toLocaleDateString("en-CA", { timeZone: "Europe/Bucharest" });
+      try {
+        const response = await fetch(`/api/agenda?pana_la=${tomorrow}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { evenimente?: { id: string; titlu: string; inceput?: string; loc?: string }[] };
+        const next = (data.evenimente ?? []).find((event) => event.inceput && new Date(event.inceput).getTime() > Date.now());
+        setNextMeeting(next ? { id: next.id, titlu: next.titlu, inceput: next.inceput as string, loc: next.loc } : null);
+      } catch {
+        // rămâne ce era
+      }
+    };
+    wake();
+    void load();
+    const refresh = setInterval(load, 5 * 60_000);
+    const onVisible = () => {
+      wake();
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+      void lock?.release().catch(() => {});
+    };
+  }, [driving, googleConnected]);
+
+  // Cu 15 minute înainte de o întâlnire, Argus o spune o dată, dacă ascultă în acel moment.
+  useEffect(() => {
+    if (!driving || !nextMeeting) return;
+    const check = () => {
+      const minutes = Math.round((new Date(nextMeeting.inceput).getTime() - Date.now()) / 60_000);
+      if (minutes > 15 || minutes < 1 || warnedRef.current.has(nextMeeting.id)) return;
+      if (!activeRef.current || phaseRef.current !== "listening") return;
+      warnedRef.current.add(nextMeeting.id);
+      const where = nextMeeting.loc ? `, la ${nextMeeting.loc}` : "";
+      void report(
+        spokenLanguage() === "ro"
+          ? `În ${minutes} minute ai ${nextMeeting.titlu}${where}.`
+          : `In ${minutes} minutes you have ${nextMeeting.titlu}${where}.`,
+      );
+    };
+    check();
+    const id = setInterval(check, 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driving, nextMeeting]);
+  const pendingConfirm = cards.find((card) => card.kind === "confirm");
   const [canListenNow, setCanListenNow] = useState(true);
   useEffect(() => setCanListenNow(canListen()), []);
 
@@ -1357,6 +1455,9 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           <span className="brand-mark">A</span>
           <span className="brand-name">ARGUS</span>
         </div>
+        <button className="car-toggle" onClick={toggleDriving} aria-pressed={driving}>
+          Mașină
+        </button>
         <button className="settings-toggle" onClick={() => setSettingsOpen((open) => !open)} aria-expanded={settingsOpen}>
           {settingsOpen ? "Închide" : "Setări"}
         </button>
@@ -1511,6 +1612,80 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       </aside>
 
       <CardStack cards={cards} onClose={closeCard} onAnswer={settle} />
+
+      {driving && (
+        <div className="car" role="dialog" aria-label="Mod mașină">
+          <div className="car-top">
+            <span className="car-time" suppressHydrationWarning>
+              {now ? timeOf(now) : "--:--"}
+            </span>
+            <button type="button" className="car-exit" onClick={toggleDriving}>
+              Ieși din mașină
+            </button>
+          </div>
+          <div className="car-next">
+            {nextMeeting ? (
+              <>
+                <span className="car-next-label">
+                  Următoarea ·{" "}
+                  {new Date(nextMeeting.inceput).toLocaleString("ro-RO", {
+                    timeZone: "Europe/Bucharest",
+                    ...(new Date(nextMeeting.inceput).toDateString() === new Date().toDateString() ? {} : { weekday: "long" }),
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="car-next-title">{nextMeeting.titlu}</span>
+                {nextMeeting.loc && (
+                  <a className="car-next-go" href={`https://waze.com/ul?q=${encodeURIComponent(nextMeeting.loc)}&navigate=yes`}>
+                    {nextMeeting.loc}
+                  </a>
+                )}
+              </>
+            ) : (
+              <span className="car-next-label">{googleConnected ? "Nicio întâlnire azi" : "Agenda nu e conectată"}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            className={`car-mic car-${phase}`}
+            onClick={toggle}
+            aria-label={connected ? "Oprește conversația" : "Pornește conversația"}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z" />
+            </svg>
+          </button>
+          <p className="car-status">{phase === "idle" ? "Atinge ca să vorbești" : label}</p>
+          {pendingConfirm && pendingConfirm.kind === "confirm" && (
+            <div className="car-confirm">
+              <p>{pendingConfirm.title}</p>
+              <div>
+                <button type="button" onClick={() => settle(pendingConfirm.id, "da")}>
+                  Accept
+                </button>
+                <button type="button" onClick={() => settle(pendingConfirm.id, "nu")}>
+                  Refuz
+                </button>
+              </div>
+            </div>
+          )}
+          {error && <p className="car-error">{error}</p>}
+        </div>
+      )}
+
+      {quickStart && !driving && phase === "idle" && (
+        <button
+          type="button"
+          className="quickstart"
+          onClick={() => {
+            setQuickStart(false);
+            void begin();
+          }}
+        >
+          Atinge oriunde ca să vorbești
+        </button>
+      )}
       {!use2d && <WindowLinks cards={cards} orb={orbRef} />}
 
       {!armed && (

@@ -107,8 +107,12 @@ Laptopul îi pregătește singur lui Daniel, cu vreo 30 de minute înainte, fiec
 - Ce ține de scris mailuri, documente noi, fișierele sau browserul de pe laptop merge la claude_trimite. Citirile din Gmail, Contacte și Drive le faci tu direct.
 - Poți porni mai multe deodată; fiecare revine când e gata. Nu citești linkuri cu voce.
 
+# Drumuri și apeluri
+- „Du-mă la…”, „unde am următoarea întâlnire” (cu loc în agendă) → navigheaza cu adresa: se deschide Waze. Spui adresa într-o propoziție, apoi chemi unealta.
+- „Sună-l pe X” → cauți numărul cu contacte_cauta, apoi suna cu numărul și numele. iPhone-ul îl întreabă singur dacă sună; tu nu mai ceri confirmare. Dacă are mai multe numere, alegi mobilul; dacă nu-l găsești, spui scurt.
+
 # Ce nu ai încă
-Apelurile vin în versiunile următoare. Spune sincer că încă nu ai acces. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
+Spune sincer când ceva nu ai încă. Nu inventa niciodată întâlniri, cifre sau sarcini: spui doar ce primești de la unelte.
 
 # Reguli de siguranță, fără excepții
 1. Nu trimiți niciun mesaj, mail sau invitație fără să arăți textul exact și destinatarul și să primești confirmarea lui Daniel.
@@ -136,7 +140,9 @@ export const DRIVING = `
 # Daniel conduce acum (modul „la volan”)
 - Răspunsuri de cel mult două propoziții scurte, doar cu vocea. Nu spui niciodată „uite pe ecran” și nu-i ceri să citească ceva.
 - La confirmări citești exact ce urmează să faci, iar el răspunde „accept” sau „refuz”.
-- Nu pornești rutine lungi fără să-ți ceară; rezultatele de la laptop și cercetări le spui pe scurt.`;
+- Nu pornești rutine lungi fără să-ți ceară; rezultatele de la laptop și cercetări le spui pe scurt.
+- Rezumatele (mesaje, mailuri): spui doar ce e urgent, într-o propoziție, și adaugi „restul ți-l arăt când oprești”. Nu deschizi ferestre cu liste lungi.
+- Adresa următoarei întâlniri o spui și pornești navigheaza, fără să întrebi.`;
 
 export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
   {
@@ -515,6 +521,27 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
         valoare: { type: "number", description: "Volumul, 0-100, la „volum”" },
       },
       required: ["actiune"],
+    },
+  },
+  {
+    name: "navigheaza",
+    description: "Deschide Waze cu navigarea spre o adresă sau un loc (de ex. locul unei întâlniri din agendă). Aplicația Argus trece în fundal.",
+    input_schema: {
+      type: "object",
+      properties: { destinatie: { type: "string", description: "Adresa sau numele locului, cum apare în agendă sau cum a spus Daniel" } },
+      required: ["destinatie"],
+    },
+  },
+  {
+    name: "suna",
+    description: "Pornește un apel telefonic pe iPhone. iPhone-ul cere singur confirmarea apelului.",
+    input_schema: {
+      type: "object",
+      properties: {
+        numar: { type: "string", description: "Numărul de telefon, din contacte_cauta" },
+        nume: { type: "string", description: "Pe cine sună" },
+      },
+      required: ["numar"],
     },
   },
   {
