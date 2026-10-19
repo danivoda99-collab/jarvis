@@ -108,21 +108,45 @@ export function cleanVizual(input: unknown): Vizual | undefined {
   return Object.keys(result).length ? result : undefined;
 }
 
+// O sumă scrisă de Sheet în orice format: „1,100.00” (en_GB, cum e Sheet-ul bugetului), „1.100,00”, „1100”, „-25,5 lei”.
+// Separatorul zecimal e ultimul dintre „.” și „,” când apar amândouă; unul singur urmat de grupuri de exact 3 cifre e de mii.
+export function amount(value: unknown): number | null {
+  const raw = String(value ?? "").replace(/[^\d,.-]/g, "");
+  if (!raw) return null;
+  const lastDot = raw.lastIndexOf(".");
+  const lastComma = raw.lastIndexOf(",");
+  let clean: string;
+  if (lastDot >= 0 && lastComma >= 0) {
+    const decimal = lastDot > lastComma ? "." : ",";
+    const thousands = decimal === "." ? "," : ".";
+    clean = raw.split(thousands).join("").replace(decimal, ".");
+  } else {
+    const sep = lastDot >= 0 ? "." : lastComma >= 0 ? "," : "";
+    clean = sep && new RegExp(`^-?\\d{1,3}(\\${sep}\\d{3})+$`).test(raw) ? raw.split(sep).join("") : raw.replace(",", ".");
+  }
+  const parsed = Number(clean);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 // Situația bugetului (Categorie, Buget, Cheltuit, Rămas, %) ca bare de progres și cifre mari.
 export function budgetVizual(table: string[][]): Vizual | undefined {
   const rows = table.slice(1);
-  const parse = (value: string) => number(String(value ?? "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}\b)/g, ""));
+  const parse = (value: string) => amount(value);
   const total = rows.find((row) => row[0] === "Total");
   const progres = rows
     .filter((row) => row[0] !== "Total")
     .map((row) => ({ eticheta: row[0], valoare: parse(row[2]) ?? 0, maxim: parse(row[1]) ?? 0, unitate: "lei" }))
     .filter((item) => item.maxim > 0)
     .sort((a, b) => b.valoare / b.maxim - a.valoare / a.maxim);
+  const lei = (value: string) => {
+    const parsed = parse(value);
+    return parsed === null ? `${value} lei` : `${parsed.toLocaleString("ro-RO", { maximumFractionDigits: 2 })} lei`;
+  };
   const cifre = total
     ? [
-        { eticheta: "Cheltuit", valoare: `${total[2]} lei` },
-        { eticheta: "Buget", valoare: `${total[1]} lei` },
-        { eticheta: "Rămas", valoare: `${total[3]} lei` },
+        { eticheta: "Cheltuit", valoare: lei(total[2]) },
+        { eticheta: "Buget", valoare: lei(total[1]) },
+        { eticheta: "Rămas", valoare: lei(total[3]) },
       ]
     : undefined;
   return cleanVizual({ cifre, progres });
