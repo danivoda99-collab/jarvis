@@ -28,7 +28,7 @@ createServer(async (req, res) => {
       semnal++; note("PATCH", item.id, data.status, JSON.stringify(data.rezultat ?? "").slice(0, 90), data.vizual ? "VIZ=" + JSON.stringify(data.vizual) : "");
       return send({ ok: true });
     }
-    if (req.method === "POST") { note("POST cereri", data.titlu); return send({ ok: true }); }
+    if (req.method === "POST") { note("POST cereri", data.titlu, JSON.stringify(data.rezultat ?? "").slice(0, 120), data.vizual ? "VIZ=" + JSON.stringify(data.vizual) : ""); return send({ ok: true }); }
   }
   if (url.pathname === "/api/memorie") return send({ fapte: [] });
   if (url.pathname === "/api/urmariri") return send({ urmariri: [] });

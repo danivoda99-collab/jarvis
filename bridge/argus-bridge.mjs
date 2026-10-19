@@ -106,8 +106,8 @@ Bugetul personal (Sheet „Buget personal”, id 18aCKEXM5g2cSpyjZVp8lPwnunvMEwT
 - Când nu ești sigur (categoria, ce rând să corectezi, suma), nu scrii nimic: îi arăți rândurile relevante ca un tabel scurt (cel mult 5 rânduri) și întrebarea, prin CONFIRMARE.
 Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88te0btCGLyD7EHXQtSRgYuMQBI; citești oricând, scrii doar în Raportari și Teluri, după „Da”, ca la regula 6):
 - Raportări zilnice din aplicația Team Vodă: tabul „Raportari” (rândul 1 e antetul: Data activitate, Cheie luna, Saptamana, Nume, Pozitie, Echipa (tab), Contacte, Int. Analiza, Analiza, Int. Cons, Consultante, Cons.2, Clienti semnati, Contracte semnate, UN semnate, Clienti platiti, Contracte platite, Unitati platite, Recomandari cl/col, Service, Stare). Rândurile cu Stare „STERS” nu le numeri.
-- Obiectivele săptămânii: tabul „Teluri” (Cheie saptamana, Saptamana, Nume, Analize, Consultante, Service). Cine e în echipă, poziția și liderul: „_ConfigEchipa” (Nume, Pozitie, Tab, Rol, Recrutor).
-- Totalul săptămânii și cine n-a raportat: „Raportari Saptamana” (rândul 4 „Nu au raportat”, tabelul de la rândul 6).
+- Obiectivele săptămânii: tabul „Teluri” (Trimis la, Cheie saptamana de forma W2026-10-03, Saptamana „03.10 – 09.10”, Nume, Analize, Consultante, …). Săptămâna echipei ține de sâmbătă până vineri. Cine e în echipă, poziția și liderul: „_ConfigEchipa” (Nume, Pozitie, Tab, Rol, Recrutor).
+- Totalurile le calculezi mereu din rândurile brute din „Raportari” (Trimis la, Data activitate, Cheie luna, Saptamana, Nume, …), nu din „Raportari Saptamana”: acela arată săptămâna aleasă manual într-o listă și poate fi pe altă săptămână (atunci e plin de zerouri). Componența echipei o iei din „_ConfigEchipa”.
 - Nu deschizi tabul „Inchideri”, „Service”, „_Service date” și nici fișiere cu clienți: au date de clienți. Lucrezi doar cu cifre pe consultant și totaluri.
 - „Cum stă echipa”, „raport echipă”: citești doar rândurile perioadei cerute (implicit săptămâna curentă, de sâmbătă), aduni pe consultant și compari cu Teluri. Rezumatul: totalul echipei, cine e peste obiectiv, cine e în urmă, cine n-a raportat. Pui VIZUAL cu „cifre” (totaluri), „progres” (analize și consultanțe față de obiectivul echipei), „bare” (consultanții, cu valoare2 = obiectivul sau săptămâna trecută) și un „tabel” scurt (Nume | Analize | Consultanțe | Semnate).
 - „Cum stă X”: același lucru pentru o singură persoană, cu ultimele 4 săptămâni ca „linie”.
@@ -758,7 +758,7 @@ async function checkAlerts(config) {
       `Acum e ${now}. Verificare automată pentru alerte; Daniel nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
       "Verifici, repede:",
       "1. Gmail: mailurile necitite din ultimele 3 ore. Important = un om real îi cere ceva lui Daniel, un termen azi sau mâine, ceva de la OVB sau de la echipă. Reclamele, newsletterele și notificările automate nu contează. Un mail de la un client OVB îl spui doar ca „mail de la un client”, fără nume sau detalii.",
-      "2. Echipa (centralizatorul, tabul „Raportari Saptamana”, rândul 4 „Nu au raportat”): doar dacă e după ora 20, cine n-a raportat azi.",
+      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” care n-au niciun rând azi în „Raportari”): doar dacă e după ora 20, cine n-a raportat azi.",
       "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget.",
       `Ce a fost deja anunțat azi (nu repeta): ${state.trimise.filter((item) => item.zi === now.slice(0, 10)).map((item) => item.cheie).join(", ") || "nimic"}.`,
       "Respecți ce scrie în memorie.md despre alerte (de exemplu ce nu vrea Daniel să primească).",
@@ -782,6 +782,57 @@ async function checkAlerts(config) {
   state.trimise = [...state.trimise.filter((item) => item.zi === day), ...fresh.map((item) => ({ zi: day, cheie: item.cheie }))];
   writeFileSync(ALERT_FILE, JSON.stringify(state, null, 2));
   log("Alerte trimise:", fresh.map((item) => item.cheie).join(", "));
+}
+
+// ——— Raportul de echipă (ales de Daniel pe 19.10.2026): lunea după 8 (sau sâmbăta după 9, cu raportZi), laptopul face singur
+// raportul săptămânii trecute din centralizator și îl trimite pe telefon ca puncte, bare și progres. ———
+const WEEKLY_FILE = join(HERE, "raport-luni.json");
+
+function bucharestDay(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })
+    .formatToParts(date)
+    .reduce((all, part) => ({ ...all, [part.type]: part.value }), {});
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, weekday: parts.weekday };
+}
+
+function loadWeekly() {
+  try {
+    return JSON.parse(readFileSync(WEEKLY_FILE, "utf8"));
+  } catch {
+    return { facut: "", incercat: 0 };
+  }
+}
+
+async function weeklyReport(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const state = loadWeekly();
+  // Ziua o poate schimba Daniel: în config.json, „raportZi”: "Sat" (sâmbătă, după 9) sau "Mon" (luni, după 8, implicit).
+  const day = config.raportZi === "Sat" ? "Sat" : "Mon";
+  if (today.weekday !== day || hour < (day === "Sat" ? 9 : 8) || hour >= 21 || state.facut === today.date) return;
+  // Dacă n-a mers (limită, Google deconectat), mai încearcă peste o oră, tot azi.
+  if (Date.now() - (state.incercat || 0) < 60 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(WEEKLY_FILE, JSON.stringify(state, null, 2));
+  log("Fac raportul de echipă de luni.");
+  const run = await runClaude(
+    config,
+    [
+      `Azi e ${day === "Sat" ? "sâmbătă" : "luni"}, ${today.date}. Raport automat de echipă pentru săptămâna trecută (sâmbătă–vineri); Daniel nu a cerut nimic acum. Doar citire: nu scrii și nu ștergi nimic.`,
+      "Citești din centralizator, ca la „cum stă echipa”, doar tabele cu date de echipă (Raportari, Teluri, _ConfigEchipa), niciodată Inchideri sau Service. Săptămâna trecută = sâmbăta–vinerea de dinainte; totalurile le calculezi din rândurile brute din Raportari (nu din „Raportari Saptamana”, care poate fi pe altă săptămână), obiectivele din Teluri pentru aceeași săptămână. Vrei: totalul echipei (analize, consultanțe, contracte) față de obiectiv, fiecare consultant față de obiectivul lui, primii 3 și cine n-a raportat deloc.",
+      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Săptămâna trecută echipa a făcut 42 de analize, 84% din obiectiv; Ana și Mihai sunt în urmă.”). Apoi rândul VIZUAL cu: „cifre” (totalurile), „progres” (echipa față de obiectiv), „bare” (consultanții, cu valoare2 = obiectivul) și „puncte” (cel mult 6: cine e în urmă sau n-a raportat = urgent, cine e aproape = important, cine a depășit = info; text = cifrele lui într-o frază). După rândul VIZUAL nu mai scrii nimic.",
+    ].join("\n\n"),
+  );
+  if (!run.ok) {
+    noteLimit(run.text);
+    log("Raportul de luni n-a mers, reîncerc peste o oră.");
+    return;
+  }
+  const { text, vizual } = splitVisual(run.text);
+  await api(config, "POST", { titlu: "Raport echipă: săptămâna trecută", cerere: "Raport automat de luni", rezultat: text, vizual });
+  state.facut = today.date;
+  writeFileSync(WEEKLY_FILE, JSON.stringify(state, null, 2));
+  log("Raportul de luni a plecat pe telefon.");
 }
 
 function loadPreps() {
@@ -886,6 +937,7 @@ function runChores(config) {
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);
     if (config.alerte !== false) await checkAlerts(config);
+    if (config.raportLuni !== false) await weeklyReport(config);
   })()
     .catch((error) => log("Treburile automate n-au mers:", error.message))
     .finally(() => (chores = false));

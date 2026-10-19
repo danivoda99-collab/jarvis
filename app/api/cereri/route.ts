@@ -41,6 +41,7 @@ export async function POST(request: Request) {
     confirmat?: { titlu?: string; text?: string; destinatar?: string };
     // Laptopul raportează direct un rezultat (o urmărire îndeplinită, o pregătire de întâlnire).
     rezultat?: string;
+    vizual?: unknown;
   };
   const text = (body.cerere ?? "").trim().slice(0, 4000);
   if (!text) return NextResponse.json({ error: "Lipsește cererea." }, { status: 400 });
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     const titlu = (body.titlu ?? "").trim().slice(0, 120) || text.slice(0, 60);
     if (body.rezultat) {
       const cerere = await addCerere(titlu, text, undefined, "în lucru");
-      const done = { ...cerere, status: "gata" as const, rezultat: String(body.rezultat).slice(0, 8000), actualizat: new Date().toISOString() };
+      const done = { ...cerere, status: "gata" as const, rezultat: String(body.rezultat).slice(0, 8000), vizual: cleanVizual(body.vizual), actualizat: new Date().toISOString() };
       await saveCerere(done);
       await notify(titlu, firstSentence(done.rezultat), done.id);
       return NextResponse.json({ ok: true, id: cerere.id });

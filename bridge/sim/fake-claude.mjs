@@ -44,6 +44,7 @@ async function answer(content) {
   const has = (k) => content.includes(k);
   if (has("Pregătire, nu e o cerere")) { await sleep(1500); return { result: "gata" }; }
   if (has("Google Calendar evenimentele")) return { result: "[]" };
+  if (has("Raport automat de echipă")) return { result: 'Săptămâna trecută echipa a făcut 42 de analize, 84% din obiectiv.\nVIZUAL: {"progres":[{"eticheta":"Analize","valoare":42,"maxim":50}],"puncte":[{"titlu":"Ana","text":"n-a raportat","nivel":"urgent"}]}\nUn paragraf în plus care trebuie să dispară.' };
   if (has("Verificare automată pentru alerte")) return { result: "ALERTA\n- mail:ana-contract | Ana îți cere contractul până mâine.\n- buget:mancare | Mâncarea e la 95% din buget.\nrând fără format" };
   if (has("SIM_CRASHALL") || (has("SIM_CRASH") && stream)) { process.stderr.write("Error: simulated crash\n"); note("crash"); process.exit(1); }
   if (has("SIM_HANG")) { note("hang"); await sleep(1e9); }
