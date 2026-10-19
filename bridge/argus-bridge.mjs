@@ -745,6 +745,13 @@ function parseAlerts(text) {
     .slice(0, 5);
 }
 
+// O alertă de buget (o categorie trecută de 90%) vine o dată pe lună; restul, o dată pe zi.
+// Ziua e „19.10.2026”, deci luna e ultima parte, „10.2026”.
+function alreadySent(item, day) {
+  if (item.cheie.startsWith("buget:")) return item.zi.slice(3) === day.slice(3);
+  return item.zi === day;
+}
+
 async function checkAlerts(config) {
   const state = loadAlerts();
   const hour = bucharestHour();
@@ -760,8 +767,8 @@ async function checkAlerts(config) {
       "Verifici, repede:",
       "1. Gmail: mailurile necitite din ultimele 3 ore. Important = un om real îi cere ceva lui Daniel, un termen azi sau mâine, ceva de la OVB sau de la echipă. Reclamele, newsletterele și notificările automate nu contează. Un mail de la un client OVB îl spui doar ca „mail de la un client”, fără nume sau detalii.",
       "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”): după ora 20, cine n-a raportat azi; oricând, cine n-a raportat nici în ultimele 2 zile lucrătoare (cheie echipa:2zile-<prenume>).",
-      "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget.",
-      `Ce a fost deja anunțat azi (nu repeta): ${state.trimise.filter((item) => item.zi === now.slice(0, 10)).map((item) => item.cheie).join(", ") || "nimic"}.`,
+      "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget (cheie buget:<categorie>, fără procent în cheie).",
+      `Ce a fost deja anunțat (nu repeta): ${state.trimise.filter((item) => alreadySent(item, now.slice(0, 10))).map((item) => item.cheie).join(", ") || "nimic"}.`,
       "Respecți ce scrie în memorie.md despre alerte (de exemplu ce nu vrea Daniel să primească).",
       "Răspunzi DOAR așa: primul rând exact NIMIC dacă nu e nimic nou și important. Altfel primul rând ALERTA, apoi câte un rând pe alertă, cel mult 3: „- <cheie scurtă, de ex. mail:ana-contract, echipa:neraportat, buget:mancare> | <o propoziție bună de citit cu voce>”.",
     ].join("\n\n"),
@@ -772,7 +779,7 @@ async function checkAlerts(config) {
     return;
   }
   const day = now.slice(0, 10);
-  const sent = new Set(state.trimise.filter((item) => item.zi === day).map((item) => item.cheie));
+  const sent = new Set(state.trimise.filter((item) => alreadySent(item, day)).map((item) => item.cheie));
   const fresh = parseAlerts(run.text).filter((item) => !sent.has(item.cheie));
   if (!fresh.length) return;
   await api(config, "POST", {
@@ -780,7 +787,7 @@ async function checkAlerts(config) {
     cerere: "Alerte automate (mail, echipă, buget)",
     rezultat: fresh.map((item) => item.text).join("\n"),
   });
-  state.trimise = [...state.trimise.filter((item) => item.zi === day), ...fresh.map((item) => ({ zi: day, cheie: item.cheie }))];
+  state.trimise = [...state.trimise.filter((item) => alreadySent(item, day)), ...fresh.map((item) => ({ zi: day, cheie: item.cheie }))];
   writeFileSync(ALERT_FILE, JSON.stringify(state, null, 2));
   log("Alerte trimise:", fresh.map((item) => item.cheie).join(", "));
 }
