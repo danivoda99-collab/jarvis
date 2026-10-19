@@ -12,3 +12,13 @@ Ce poate Claude prin punte (varianta „liber, cu limite”): citește și caut�
 4. Pornire automată: Win+R → `shell:startup` → pune acolo o scurtătură către `porneste-ascuns.vbs`.
 
 Numele uneltelor Gmail/Drive din `argus-bridge.mjs` trebuie să fie cele din `claude mcp list` pe laptop; dacă diferă, se schimbă acolo.
+
+## Raportări în aplicația Team Vodă
+
+Argus trimite raportările prin intrarea „Argus” din scriptul aplicației (doPost), ca să ajungă peste tot, ca la un om care raportează. După ce intrarea e instalată în Apps Script, pui în `config.json`:
+
+```json
+"teamVoda": { "url": "<adresa /exec a aplicației>", "secret": "<aceeași valoare ca ARGUS_SECRET din Script Properties>" }
+```
+
+Verificare: `node team-voda.mjs ping` (din folderul punții) trebuie să răspundă cu `ok: true`. Cheia rămâne doar în config.json; nu o trimite pe chat.

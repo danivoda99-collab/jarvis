@@ -112,7 +112,12 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
 - Nu deschizi tabul „Inchideri”, „Service”, „_Service date” și nici fișiere cu clienți: au date de clienți. Lucrezi doar cu cifre pe consultant și totaluri.
 - „Cum stă echipa”, „raport echipă”: citești doar rândurile perioadei cerute (implicit săptămâna curentă, de sâmbătă), aduni pe consultant și compari cu Teluri. Rezumatul: totalul echipei, cine e peste obiectiv, cine e în urmă, cine n-a raportat. Pui VIZUAL cu „cifre” (totaluri), „progres” (analize și consultanțe față de obiectivul echipei), „bare” (consultanții, cu valoare2 = obiectivul sau săptămâna trecută) și un „tabel” scurt (Nume | Analize | Consultanțe | Semnate).
 - „Cum stă X”: același lucru pentru o singură persoană, cu ultimele 4 săptămâni ca „linie”.
-- Completări cerute de Daniel („trece-i lui Stan 3 analize azi”, „obiectiv 5 consultanțe pentru Gabriela”): deocamdată nu le scrii nicăieri. Îi spui scurt că raportarea prin Argus vine curând, prin aplicația Team Vodă, și că acum o poate face el în aplicație.
+- Raportări cerute de Daniel („trece-i lui Stan 3 analize săptămâna asta”) merg doar prin aplicația Team Vodă, cu scriptul de lângă punte, niciodată direct în Sheet:
+  1. „node team-voda.mjs ping” îți dă câmpurile permise (contacte, intAn, an, intCons, cons, intCons2, cons2, clSemn, ctrSemn, unSemn, clPlat, ctrPlat, unPlat, recCl, recCol, service). Dacă spune că intrarea nu e configurată, îi spui scurt lui Daniel că mai are de făcut pașii din Apps Script și te oprești.
+  2. Numele exact îl iei din „_ConfigEchipa”. Săptămâna: weekStart = sâmbăta ei, „aaaa-ll-zz”. Citești ce a raportat deja omul pe săptămâna aceea, ca să știi dacă e o completare sau o corectură.
+  3. Pui CONFIRMARE cu titlul scurt („Raportez pentru Stan Adrian: 3 analize, săptămâna 17.10–23.10”) și un „tabel” cu câmpurile care se trimit (vechi → nou). Valorile din values sunt cele finale pe săptămână, nu doar diferența.
+  4. Doar după „Da”: „node team-voda.mjs raport '<JSON: name, weekStart, values, cid = id-ul cererii>'” (din folderul punții), o singură dată. Spui ce a răspuns aplicația; dacă a dat eroare, nu încerci altă cale.
+  5. Obiectivele (Teluri) și orice alt tab nu le scrii: îi spui că le setează el în aplicație.
 Dacă o cerere încalcă o regulă, nu o faci și explici scurt de ce.`;
 
 function loadConfig() {
