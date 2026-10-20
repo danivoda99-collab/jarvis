@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { QueueError } from "@/lib/cereri";
-import { allowed, answer, tellArgus, type Replica } from "@/lib/ajutor";
+import { allowed, answer, openTicket, tellArgus, type Replica } from "@/lib/ajutor";
 
 // Pagina de ajutor e publică (o folosesc oamenii din echipă), deci fiecare adresă are o limită pe oră.
 export async function POST(request: Request) {
@@ -20,11 +20,12 @@ export async function POST(request: Request) {
       const who = name || "cineva din echipă";
       const history = Array.isArray(body.istoric) ? body.istoric.filter((item) => item && typeof item.text === "string").slice(-6) : [];
       const talk = history.map((item) => `${item.rol === "om" ? who : "Asistent"}: ${item.text.slice(0, 400)}`).join("\n");
+      const bilet = await openTicket(question);
       await tellArgus(
         `Ajutor Team Vodă: ${who}`,
-        `${who} nu s-a descurcat în aplicație: „${question}”${talk ? `\n\nCe a vorbit cu asistentul:\n${talk}` : ""}\n\nOmul așteaptă un răspuns: pregătește-i pe WhatsApp explicația (CONFIRMARE), sau spune-i lui Daniel ce trebuie făcut.`,
+        `${who} nu s-a descurcat în aplicație: „${question}”${talk ? `\n\nCe a vorbit cu asistentul:\n${talk}` : ""}\n\nBiletul: ${bilet}\nOmul așteaptă răspunsul pe pagina de ajutor (linia OMULUI). Dacă e urgent (de exemplu sâmbătă înainte de 17:00), pregătește-i și un mesaj pe WhatsApp (CONFIRMARE).`,
       );
-      return NextResponse.json({ ok: true, raspuns: "Am trimis mai departe. Primești răspuns pe WhatsApp cât de repede se poate." });
+      return NextResponse.json({ ok: true, bilet, raspuns: "Am trimis întrebarea mai departe. Răspunsul apare aici, pe pagina de ajutor, imediat ce e gata." });
     }
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Ajutorul nu e pornit încă." }, { status: 500 });
     if (!(await allowed(ip, 30))) return NextResponse.json({ error: "Prea multe întrebări într-o oră. Încearcă puțin mai târziu." }, { status: 429 });

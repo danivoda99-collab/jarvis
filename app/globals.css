@@ -1774,6 +1774,10 @@ body {
   color: var(--ivory-muted);
 }
 
+.help-ticket {
+  display: contents;
+}
+
 .help-escalate {
   display: flex;
   flex-wrap: wrap;
