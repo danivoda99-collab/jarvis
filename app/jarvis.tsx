@@ -24,6 +24,7 @@ import {
   speakStream,
   chooseLanguage,
   spokenLanguage,
+  voiceCheckDone,
   splitReply,
   stopSpeaking,
   type Language,
@@ -814,7 +815,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [typed, setTyped] = useState("");
   const [voices, setVoices] = useState<string[]>([]);
   const [voiceName, setVoiceName] = useState("");
-  const [language, setLanguage] = useState<Language>("en");
+  const [language, setLanguage] = useState<Language>("ro");
   // „La volan”: răspunsuri foarte scurte, totul cu vocea, nimic de citit.
   const [driving, setDriving] = useState(false);
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
@@ -958,7 +959,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         setVoiceName(data.voci.includes(saved) ? saved : fallback);
         setCanListenNow(canListen());
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(voiceCheckDone);
     return () => window.speechSynthesis?.removeEventListener?.("voiceschanged", loadBrowser);
   }, []);
 

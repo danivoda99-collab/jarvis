@@ -112,9 +112,11 @@ export type Language = "en" | "ro";
 // În ce limbă îi vorbește Argus lui Daniel. Scrisul rămâne mereu în română.
 export function spokenLanguage(): Language {
   try {
-    return localStorage.getItem(LANGUAGE_KEY) === "ro" ? "ro" : "en";
+    // Implicit română: aplicația de pe ecranul principal și Safari (butonul de Acțiune) au memorii separate,
+    // iar o memorie goală nu trebuie să-l facă pe Argus să răspundă în engleză.
+    return localStorage.getItem(LANGUAGE_KEY) === "en" ? "en" : "ro";
   } catch {
-    return "en";
+    return "ro";
   }
 }
 
@@ -122,7 +124,7 @@ export function chooseLanguage(language: Language) {
   try {
     localStorage.setItem(LANGUAGE_KEY, language);
   } catch {
-    // fără memorare; rămâne engleza
+    // fără memorare; rămâne româna
   }
 }
 
@@ -157,9 +159,21 @@ function browserVoice(): SpeechSynthesisVoice | null {
 let cloud = false;
 let cloudDefault = "ash";
 
+// Până aflăm dacă serverul are vocea OpenAI, nu vorbim cu vocea robotică a telefonului (cel mult 4 secunde).
+let markChecked: () => void = () => {};
+const voiceChecked = new Promise<void>((resolve) => {
+  markChecked = resolve;
+  setTimeout(resolve, 4000);
+});
+
+export function voiceCheckDone() {
+  markChecked();
+}
+
 export function setCloudVoice(enabled: boolean, defaultVoice: string) {
   cloud = enabled;
   cloudDefault = defaultVoice;
+  markChecked();
 }
 
 export function canListen() {
@@ -259,8 +273,9 @@ export function speakStream(): { push: (sentence: string) => void; finish: () =>
   };
 }
 
-export function speak(text: string): Promise<void> {
-  if (!text.trim()) return Promise.resolve();
+export async function speak(text: string): Promise<void> {
+  if (!text.trim()) return;
+  await voiceChecked;
   return cloud ? cloudSpeak(text) : browserSpeak(text);
 }
 

@@ -366,7 +366,8 @@ function runClaude(config, prompt, { resume, kind = "work", gate: unlock } = {})
         resolve({ ok: false, text });
       }
     });
-    child.stdin.end(prompt);
+    // Un proces de o singură dată nu lasă taburi în urmă: grupul lui nu mai e folosit de nimeni.
+    child.stdin.end(gate ? `${prompt}\n\nLa final, după ce ai terminat tot, închizi toate taburile din grupul tău, inclusiv cel de WhatsApp.` : prompt);
   });
 }
 
@@ -387,7 +388,7 @@ function spawnLane(config, kind = "work") {
   ];
   const env = kind === "wa" ? { ...process.env, ENABLE_TOOL_SEARCH: "false" } : process.env;
   const child = spawn(config.claude, args, { cwd: config.folder, windowsHide: true, env });
-  const lane = { child, kind, gate, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null, err: "" };
+  const lane = { child, kind, gate, chrome: kind === "wa" && config.chrome !== false, busy: false, runs: 0, used: Date.now(), dead: false, buffer: "", done: null, err: "" };
   const fail = (text) => {
     lane.dead = true;
     dropGate(gate);
@@ -451,10 +452,36 @@ function stopLane(lane) {
   }
 }
 
+// Fiecare proces cu Chrome are grupul lui de taburi, care rămâne deschis după ce procesul se oprește.
+// Înainte să-l oprim, îi cerem să-și închidă taburile (inclusiv WhatsApp, pe care îl redeschide următorul proces).
+const TABS_CLEANUP =
+  "Curățenie, nu e o cerere: închide toate taburile din grupul tău, inclusiv cel de WhatsApp, cu tabs_close_mcp. Nu deschide nimic. Răspunde doar «gata».";
+const CLEANUP_MS = 45_000;
+
+function closeTabsThenStop(lane) {
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      stopLane(lane);
+      resolve();
+    };
+    const timer = setTimeout(finish, CLEANUP_MS);
+    lane.busy = true;
+    lane.done = finish;
+    try {
+      lane.child.stdin.write(`${JSON.stringify({ type: "user", message: { role: "user", content: TABS_CLEANUP } })}\n`);
+    } catch {
+      finish();
+    }
+  });
+}
+
 function retireLane(lane) {
   if (lanes.includes(lane)) lanes.splice(lanes.indexOf(lane), 1);
   if (waLane === lane) waLane = null;
+  if (lane.kind === "wa" && lane.chrome && !lane.dead && !lane.busy) return closeTabsThenStop(lane);
   stopLane(lane);
+  return Promise.resolve();
 }
 
 // Oprește procesele în plus care stau degeaba; primul rămâne treaz.
@@ -763,8 +790,8 @@ const RESTART_CODE = 75;
 
 function restart() {
   log("Puntea a fost actualizată. Repornesc.");
-  for (const lane of [...lanes]) retireLane(lane);
-  process.exit(RESTART_CODE);
+  const all = waLane ? [...lanes, waLane] : [...lanes];
+  return Promise.all(all.map(retireLane)).finally(() => process.exit(RESTART_CODE));
 }
 
 function supervise() {
