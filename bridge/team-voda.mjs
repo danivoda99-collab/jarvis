@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Funcțiile care doar citesc merg fără „Da”; orice altceva are nevoie de lacăt.
-const READ_FNS = new Set(["AR_myReports"]);
+const READ_FNS = new Set(["AR_myReports", "AR_mgLista"]);
 
 function fail(message) {
   console.log(JSON.stringify({ ok: false, error: message }));
@@ -93,7 +93,8 @@ if (!readOnly) {
 const response = await fetch(url, {
   method: "POST",
   headers: { "Content-Type": "text/plain;charset=utf-8" },
-  body: JSON.stringify({ secret, action, payload }),
+  // La „call”, aplicația citește fn și args direct din corp; le punem și în payload, pentru versiunile mai vechi.
+  body: JSON.stringify(action === "call" ? { secret, action, fn: payload.fn, args: payload.args ?? [], payload } : { secret, action, payload }),
   redirect: "follow",
 }).catch((error) => fail(`Aplicația nu răspunde: ${error.message}`));
 const text = await response.text();
