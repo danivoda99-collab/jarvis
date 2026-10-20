@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { command } from "@/lib/cereri";
-import { once, tellDaniel } from "@/lib/ajutor";
+import { once, tellArgus, tellDaniel } from "@/lib/ajutor";
 
 // Aplicația Team Vodă trimite aici erorile oamenilor (aceleași rânduri ca în tabul „_Erori”), cu cheia AJUTOR_SECRET.
-// O pierdere izolată de conexiune doar se notează; mai mulți oameni blocați sau o eroare reală ajung la Daniel.
+// O pierdere izolată de conexiune doar se notează; o eroare reală merge la laptop, să o rezolve Argus.
+// Mai mulți oameni blocați în același timp e urgent: Daniel e anunțat direct, iar laptopul caută cauza.
 const NETWORK = /network|http 0|http -1|failed to fetch|timeout|conexiun/i;
 const WINDOW_MS = 30 * 60_000;
 
@@ -41,15 +42,15 @@ export async function POST(request: Request) {
         `În ultima jumătate de oră, ${people.size} oameni (${[...people].slice(0, 5).join(", ")}) au pierdut conexiunea cu aplicația la trimitere. Cel mai probabil e aglomerație la Google sau internet slab; aplicația le păstrează formularul, dar spune-le să reîncerce peste câteva minute.`,
         "Monitorizarea erorilor Team Vodă",
       );
+      await tellArgus(
+        "Team Vodă: mai mulți nu pot trimite",
+        `${people.size} oameni au pierdut conexiunea la trimitere în ultima jumătate de oră (${[...people].slice(0, 5).join(", ")}). Daniel a primit deja alerta. Află cauza și verifică pentru fiecare dacă raportul a ajuns sau nu; rezultatul îl începi cu „DANIEL:” și spui cine trebuie să retrimită.`,
+      );
     }
     return NextResponse.json({ ok: true });
   }
   if (await once(`eroare:${screen}:${error.slice(0, 80)}`, 2 * 60 * 60)) {
-    await tellDaniel(
-      `Eroare în Team Vodă (${screen})`,
-      `${who} a primit o eroare în „${screen}”: ${error}`,
-      "Monitorizarea erorilor Team Vodă",
-    );
+    await tellArgus(`Eroare Team Vodă: ${screen}`, `${who} a primit o eroare în „${screen}” (${new Date(now).toISOString()}): ${error}`);
   }
   return NextResponse.json({ ok: true });
 }

@@ -106,8 +106,11 @@ export async function PATCH(request: Request) {
               ? current.progres
               : undefined,
     };
+    // Treburile din monitorizare îl anunță pe Daniel doar când îl privesc („DANIEL: …”); restul rămân în „Lucrări”.
+    const forDaniel = updated.status === "gata" && /^\s*DANIEL:/.test(updated.rezultat ?? "");
+    if (forDaniel) updated.rezultat = (updated.rezultat ?? "").replace(/^\s*DANIEL:\s*/, "");
     await saveCerere(updated);
-    if (updated.status === "gata") await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);
+    if (updated.status === "gata" && (!updated.liniste || forDaniel)) await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);
     if (updated.status === "eroare") await notify(`N-a mers: ${updated.titlu}`, firstSentence(updated.rezultat), updated.id);
     if (updated.status === "așteaptă confirmare") {
       await notify(`Aștept „Da”: ${updated.confirmare?.titlu ?? updated.titlu}`, updated.confirmare?.text ?? "", updated.id);

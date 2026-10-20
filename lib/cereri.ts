@@ -27,6 +27,8 @@ export type Cerere = {
   vizual?: Vizual;
   // La ce pas e laptopul cât lucrează („Pasul 2 din 5: caută pe internet”), pentru ecranul „Lucrări”.
   progres?: string;
+  // Treabă pornită de monitorizare (pagina de ajutor): rezultatul nu-l anunță pe Daniel, doar dacă începe cu „DANIEL:”.
+  liniste?: boolean;
 };
 
 const LIST = "argus:cereri";
@@ -90,6 +92,7 @@ export async function addCerere(
   text: string,
   confirmare?: Cerere["confirmare"],
   status?: Status,
+  liniste?: boolean,
 ): Promise<Cerere> {
   const now = new Date().toISOString();
   const cerere: Cerere = {
@@ -100,6 +103,7 @@ export async function addCerere(
     creat: now,
     actualizat: now,
     confirmare,
+    ...(liniste ? { liniste } : {}),
   };
   await command("LPUSH", LIST, cerere.id);
   await command("LTRIM", LIST, 0, KEEP - 1);
