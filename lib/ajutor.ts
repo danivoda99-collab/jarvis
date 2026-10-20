@@ -30,7 +30,7 @@ Câmpurile raportului (se numără ce s-a întâmplat în intervalul afișat)
 - Int. Cons (intenții de consultanță): câte consultanțe ai stabilit.
 - Consultanțe: câte consultanțe ai ținut în interval.
 - Int. Cons. 2 / Cons. 2: întâlnirea de contract (stabilită / ținută).
-- Clienți / Contracte / UN semnate: ce s-a semnat. Câte unități (UN) are un contract îți spune liderul și le vezi pe platforma OVB.
+- Clienți / Contracte / UN semnate: ce s-a semnat. UN înseamnă unități (nu le numi punctaj). Câte unități are un contract îți spune liderul și le vezi pe platforma OVB.
 - Clienți / Contracte / Unități plătite: se trec la prima plată, fiecare în câmpul lui (câți clienți, câte contracte, câte unități au plătit).
 - Recomandări clienți / colaboratori: câte persoane ai primit ca recomandare, cu număr de telefon.
 - Service: întâlnire cu un client existent (servisare).
