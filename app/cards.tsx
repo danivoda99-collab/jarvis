@@ -73,7 +73,7 @@ function Table({ rows }: { rows: string[][] }) {
 }
 
 // Linkurile din text (un document în Drive, o pagină) se pot deschide cu o atingere; [titlu](url) devine „titlu”.
-function Linked({ line }: { line: string }) {
+export function Linked({ line }: { line: string }) {
   const parts: React.ReactNode[] = [];
   const pattern = /\[([^\]]+)\]\((https:\/\/[^\s)]+)\)|(https:\/\/[^\s)]+)/g;
   let last = 0;

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type Anthropic from "@anthropic-ai/sdk";
 import Hud, { type HudState } from "./hud";
-import CardStack, { type Answer, type Card } from "./cards";
+import CardStack, { Linked, type Answer, type Card } from "./cards";
 import Orb, { type Module, type OrbHandle } from "./orb";
 import WindowLinks from "./links";
 import { blipSound, bootSound } from "./sounds";
@@ -137,6 +137,25 @@ function journal(sursa: string, cerere: string, rezultat: string) {
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
 const DRIVING_QUIET_ROUNDS = 15; // în mașină ascultă mai mult (cam două minute) înainte să se oprească
+
+const PROJECT_STATE: Record<Cerere["status"], { label: string; tone: "active" | "wait" | "done" | "fail" }> = {
+  nouă: { label: "În așteptare", tone: "active" },
+  "în lucru": { label: "Lucrează", tone: "active" },
+  confirmată: { label: "Trimite", tone: "active" },
+  "așteaptă confirmare": { label: "Așteaptă „Da”", tone: "wait" },
+  gata: { label: "Gata", tone: "done" },
+  eroare: { label: "N-a mers", tone: "fail" },
+  refuzată: { label: "Refuzată", tone: "fail" },
+};
+
+function sinceText(iso: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  if (minutes < 1) return "acum";
+  if (minutes < 60) return `acum ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `acum ${hours} h`;
+  return new Date(iso).toLocaleDateString("ro-RO", { timeZone: "Europe/Bucharest", day: "numeric", month: "short" });
+}
 
 export default function Jarvis({ googleConnected = false, spotifyConnected = false }: { googleConnected?: boolean; spotifyConnected?: boolean }) {
   return <Assistant googleConnected={googleConnected} spotifyConnected={spotifyConnected} />;
@@ -706,6 +725,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       } catch {
         return;
       }
+      setProjects(cereri);
       let latest = seen;
       for (const item of [...cereri].reverse()) {
         if (item.status === "așteaptă confirmare" && item.confirmare && !askedRef.current.has(item.id)) {
@@ -886,6 +906,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       setError("Nu am putut citi poza. Mai încearcă.");
     }
   }
+  const [projects, setProjects] = useState<Cerere[]>([]);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
   // Notificările: „off” = se pot porni, „on” = pornite, „denied” = refuzate, „none” = telefonul nu le suportă aici
   // (pe iPhone merg doar din aplicația pusă pe ecranul principal).
@@ -1434,6 +1456,29 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     void speak(VOICE_CHECK[spokenLanguage()]);
   }
 
+  const activeProjects = projects.filter((item) => ["nouă", "în lucru", "confirmată", "așteaptă confirmare"].includes(item.status)).length;
+
+  // Ecranul „Lucrări”: ce face laptopul în fundal, la ce pas e și ce a ieșit.
+  function openProjects() {
+    setProjectsOpen((open) => !open);
+    fetch("/api/cereri", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { cereri?: Cerere[] } | null) => data?.cereri && setProjects(data.cereri))
+      .catch(() => {});
+  }
+
+  function showProject(item: Cerere) {
+    const shaped = !item.vizual ? pointsFromText(item.rezultat || "") : undefined;
+    addCard({
+      id: crypto.randomUUID(),
+      kind: "summary",
+      title: item.titlu,
+      text: shaped ? shaped.text : item.rezultat || "",
+      vizual: shaped ? shaped.vizual : item.vizual,
+    });
+    setProjectsOpen(false);
+  }
+
   function pickLanguage(next: Language) {
     chooseLanguage(next);
     setLanguage(next);
@@ -1489,6 +1534,9 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           <span className="brand-mark">A</span>
           <span className="brand-name">ARGUS</span>
         </div>
+        <button className="work-toggle" onClick={openProjects} aria-expanded={projectsOpen}>
+          Lucrări{activeProjects ? ` · ${activeProjects}` : ""}
+        </button>
         <button className="car-toggle" onClick={toggleDriving} aria-pressed={driving}>
           Mașină
         </button>
@@ -1708,6 +1756,50 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         </div>
       )}
 
+      {projectsOpen && (
+        <div className="projects" role="dialog" aria-label="Lucrări">
+          <div className="projects-head">
+            <h2>Lucrări</h2>
+            <button onClick={() => setProjectsOpen(false)}>Închide</button>
+          </div>
+          {projects.length === 0 ? (
+            <p className="projects-empty">Încă nimic. Cere-i lui Argus un proiect („fă-mi o prezentare despre…”) și îl vezi aici cât lucrează.</p>
+          ) : (
+            <ul className="projects-list">
+              {projects.slice(0, 20).map((item) => {
+                const state = PROJECT_STATE[item.status];
+                const first = (item.rezultat || "").split("\n").find((line) => line.trim()) ?? "";
+                const link = (item.rezultat || "").split("\n").find((line) => /https:\/\//.test(line));
+                return (
+                  <li key={item.id} className={`project project-${state.tone}`}>
+                    <div className="project-top">
+                      <span className="project-state">{state.label}</span>
+                      <span className="project-time">{sinceText(item.status === "gata" || item.status === "eroare" ? item.actualizat : item.creat)}</span>
+                    </div>
+                    <div className="project-title">{item.titlu}</div>
+                    {state.tone === "active" && <div className="project-progress">{item.progres || "Pornește…"}</div>}
+                    {(item.status === "gata" || item.status === "eroare") && first && (
+                      <div className="project-result">
+                        <Linked line={first.slice(0, 220)} />
+                      </div>
+                    )}
+                    {link && link !== first && (
+                      <div className="project-result">
+                        <Linked line={link} />
+                      </div>
+                    )}
+                    {item.status === "gata" && (
+                      <button className="project-open" onClick={() => showProject(item)}>
+                        Vezi tot
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
       {quickStart && !driving && phase === "idle" && (
         <button
           type="button"

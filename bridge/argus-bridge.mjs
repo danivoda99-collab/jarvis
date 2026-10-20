@@ -37,7 +37,7 @@ const WORK_TOOLS = [
   "mcp__claude_ai_Google_Drive__read_file_content", "mcp__claude_ai_Google_Drive__create_file", "Task", "Agent",
   "mcp__claude_ai_Google_Sheets__get_spreadsheet", "mcp__claude_ai_Google_Sheets__get_values",
   "mcp__claude_ai_Google_Sheets__update_values", "mcp__claude_ai_Google_Sheets__append_values",
-  "mcp__claude_ai_Google_Sheets__update_formulas",
+  "mcp__claude_ai_Google_Sheets__update_formulas", "TodoWrite",
 ];
 // Doar după „Da”: trimiterea ciornei confirmate și ștergerile cerute de Daniel (Gmail, Drive și Calendar
 // le țin 30 de zile în Coș).
@@ -129,7 +129,7 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
   4. Pui CONFIRMARE cu un titlu scurt („Adaug pentru Stan Adrian 3 analize, săptămâna 17.10–23.10”) și „teamvoda” = exact ce pleacă: {"action": "raport", "payload": {"name": "...", "weekStart": "...", "values": {"an": 3}}}, sau {"action": "tel", "payload": {"weekStart": "...", "rows": [{"name": "...", "tel": {"an": 0, "cons": 0, "service": 0}}]}}, sau {"action": "call", "payload": {"fn": "...", "args": [...]}}. Tabelul de pe telefon îl face puntea din „teamvoda”.
   5. Doar după „Da”, o singură dată, din folderul punții: „node team-voda.mjs <action> '<payload din confirmare, plus "cid": id-ul cererii>'”. Scriptul refuză orice diferă de confirmare. Spui ce a răspuns aplicația; la ok:false spui eroarea și nu încerci altă cale.
 Proiecte mari (o prezentare, un plan, un document, o ofertă, idei de proiect, o cercetare lungă):
-- Lucrezi cât e nevoie, fără să întrebi pe drum. Pentru părți independente (cercetare, scriere, verificare) poți porni subagenți (Task) și le aduni rezultatele.
+- Lucrezi cât e nevoie, fără să întrebi pe drum. La început îți faci lista de pași cu TodoWrite (pași scurți, pe românește) și o ții la zi: Daniel vede pe telefon la ce pas ești. Pentru părți independente (cercetare, scriere, verificare) poți porni subagenți (Task) și le aduni rezultatele.
 - Rezultatul complet îl pui într-un document Google nou (create_file, ca Google Doc; prezentările ca Google Slides dacă se poate, altfel ca document cu câte o secțiune pe slide), în folderul „Argus – proiecte” din Drive (îl creezi dacă lipsește). Nu partajezi documentul cu nimeni.
 - Răspunsul: primul rând, o propoziție cu ce ai făcut (se citește cu voce și vine ca notificare); al doilea rând, linkul documentului ca [Titlu](url); apoi cel mult 3 puncte cu ce e mai important.
 Dacă o cerere încalcă o regulă, nu o faci și explici scurt de ce.`;
@@ -409,6 +409,12 @@ function spawnLane(config, kind = "work") {
       } catch {
         continue;
       }
+      // Pașii (unelte folosite, lista de pași) apar pe telefon cât lucrează.
+      if (event.type === "assistant" && lane.onStep) {
+        for (const block of event.message?.content ?? []) {
+          if (block?.type === "tool_use") lane.onStep(block.name, block.input ?? {});
+        }
+      }
       if (event.type === "result" && lane.done) {
         const done = lane.done;
         lane.done = null;
@@ -492,7 +498,7 @@ function trimLanes() {
 }
 
 // gate: ce deschide lacătul pe durata cererii ({mode: "send", text, destinatar} după „Da”, {mode: "prep"} la pregătire).
-async function runWarm(config, prompt, { kind = "work", resume, prep, gate, timeout = RUN_TIMEOUT_MS } = {}) {
+async function runWarm(config, prompt, { kind = "work", resume, prep, gate, timeout = RUN_TIMEOUT_MS, onStep } = {}) {
   if (config.treaz === false) return runClaude(config, prompt, { kind, resume, gate });
   let lane;
   if (kind === "wa") {
@@ -508,6 +514,7 @@ async function runWarm(config, prompt, { kind = "work", resume, prep, gate, time
     lane = lanes.find((item) => !item.busy) ?? spawnLane(config);
   }
   lane.busy = true;
+  lane.onStep = onStep ?? null;
   lane.runs += 1;
   lane.used = Date.now();
   openGate(lane.gate, gate);
@@ -529,6 +536,7 @@ async function runWarm(config, prompt, { kind = "work", resume, prep, gate, time
     }
   });
   closeGate(lane.gate);
+  lane.onStep = null;
   lane.busy = false;
   lane.used = Date.now();
   if (lane.dead || lane.runs >= (lane.kind === "wa" ? WA_MAX_RUNS : LANE_MAX_RUNS)) retireLane(lane);
@@ -672,6 +680,30 @@ function teamVodaTable({ action, payload }) {
   return [["Funcție", payload.fn], ...payload.args.slice(0, 10).map((arg, index) => [`Argument ${index + 1}`, cell(arg)])];
 }
 
+// Pasul curent, pe românește, pentru ecranul „Lucrări” de pe telefon. Lista de pași (TodoWrite) are prioritate.
+function stepLabel(name, input) {
+  const short = (text, max = 70) => String(text ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+  if (name === "TodoWrite" && Array.isArray(input.todos) && input.todos.length) {
+    const todos = input.todos;
+    const index = todos.findIndex((todo) => todo?.status === "in_progress");
+    const done = todos.filter((todo) => todo?.status === "completed").length;
+    if (index < 0) return done === todos.length ? "Termină și scrie răspunsul" : undefined;
+    return `Pasul ${index + 1} din ${todos.length}: ${short(todos[index].activeForm || todos[index].content)}`;
+  }
+  if (name === "WebSearch") return `Caută pe internet: ${short(input.query, 60)}`;
+  if (name === "WebFetch") return "Citește o pagină web";
+  if (name === "Task" || name === "Agent") return `Un ajutor lucrează la: ${short(input.description, 60)}`;
+  if (/Drive__create_file/.test(name)) return "Scrie documentul în Drive";
+  if (/Drive__/.test(name)) return "Caută în Drive";
+  if (/Gmail__/.test(name)) return "Se uită în mail";
+  if (/Calendar__/.test(name)) return "Se uită în agendă";
+  if (/Sheets__/.test(name)) return "Citește tabelele";
+  if (/claude-in-chrome__/.test(name)) return "Lucrează în Chrome";
+  if (name === "Write" || name === "Edit") return "Scrie";
+  if (name === "Bash") return /team-voda/.test(String(input.command)) ? "Vorbește cu aplicația Team Vodă" : "Lucrează pe laptop";
+  return undefined;
+}
+
 // Rezultatul final nu are voie să se piardă dacă internetul sau serverul cade exact atunci: reîncercăm câteva minute.
 async function report(config, body) {
   for (const delay of [2, 5, 10, 20, 40, 60, 90]) {
@@ -720,6 +752,17 @@ async function handle(config, cerere) {
         : {};
   // Lacătul Team Vodă se deschide doar pentru raportarea exactă din confirmare (nume, săptămână, cifre).
   const teamvoda = send ? teamVodaRequest(cerere.confirmare?.teamvoda) : undefined;
+  // Pasul curent ajunge pe telefon cel mult o dată la 8 secunde (lista de pași, imediat).
+  let lastStep = 0;
+  let lastLabel = "";
+  options.onStep = (name, input) => {
+    const label = stepLabel(name, input);
+    if (!label || label === lastLabel) return;
+    if (name !== "TodoWrite" && Date.now() - lastStep < 8_000) return;
+    lastStep = Date.now();
+    lastLabel = label;
+    api(config, "PATCH", { id: cerere.id, status: "în lucru", progres: label }).catch(() => {});
+  };
   if (teamvoda) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000, ...teamvoda }));
   let run;
   try {

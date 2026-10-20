@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
 const NEXT: Partial<Record<Status, Status[]>> = {
   nouă: ["în lucru"],
-  "în lucru": ["gata", "eroare", "așteaptă confirmare"],
+  "în lucru": ["în lucru", "gata", "eroare", "așteaptă confirmare"],
   "așteaptă confirmare": ["confirmată", "refuzată"],
   confirmată: ["în lucru"],
   eroare: ["nouă"],
@@ -96,6 +96,15 @@ export async function PATCH(request: Request) {
       confirmare: body.status === "așteaptă confirmare" ? body.confirmare : current.confirmare,
       sesiune: body.sesiune ?? current.sesiune,
       vizual: body.status === "gata" ? cleanVizual(body.vizual) : current.vizual,
+      // Pasul curent are sens doar cât lucrează; la „în lucru → în lucru” se schimbă doar el.
+      progres:
+        body.status !== "în lucru"
+          ? undefined
+          : body.progres !== undefined
+            ? String(body.progres).slice(0, 200)
+            : current.status === "în lucru"
+              ? current.progres
+              : undefined,
     };
     await saveCerere(updated);
     if (updated.status === "gata") await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);
