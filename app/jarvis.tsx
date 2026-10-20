@@ -679,6 +679,20 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     },
   };
 
+  // „Trimite pe WhatsApp” de sub un mesaj propus (de exemplu de agentul de echipă): o singură confirmare, cu textul exact.
+  const sendDraftRef = useRef<(draft: { catre: string; text: string }) => void>(() => {});
+  sendDraftRef.current = (draft) => {
+    void clientTools.mesaj_trimite({ canal: "WhatsApp", destinatar: draft.catre, text: draft.text });
+  };
+  useEffect(() => {
+    const onSend = (event: Event) => {
+      const draft = (event as CustomEvent<{ catre?: string; text?: string }>).detail;
+      if (draft?.catre && draft.text) sendDraftRef.current({ catre: draft.catre, text: draft.text });
+    };
+    window.addEventListener("argus-trimite", onSend);
+    return () => window.removeEventListener("argus-trimite", onSend);
+  }, []);
+
   // Ce a făcut Claude pe laptop: rezultatele apar ca ferestre, iar ce trebuie trimis cere „Da”.
   const askedRef = useRef(new Set<string>());
   useEffect(() => {

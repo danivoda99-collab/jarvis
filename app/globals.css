@@ -1664,3 +1664,29 @@ body {
     letter-spacing: 0.04em;
   }
 }
+
+/* Mesaj propus sub un punct (agentul de echipă), cu trimitere după „Da” */
+.viz-point-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.viz-point-draft-text {
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--ivory);
+}
+
+.viz-point-send {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--gold);
+  background: none;
+  border: 1px solid rgba(212, 166, 74, 0.45);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
