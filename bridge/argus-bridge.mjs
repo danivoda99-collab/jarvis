@@ -13,6 +13,10 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = join(HERE, "config.json");
+// Calea punții în forma regulilor de permisiuni din Claude Code („/c/Users/…”, cu „//” în față pentru o cale absolută).
+const HERE_RULE = HERE.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`);
+// Lacătul Team Vodă: scris doar după „Da”, pentru cererea confirmată, folosit o singură dată de team-voda.mjs.
+const TEAMVODA_GATE = join(HERE, "gate-teamvoda.json");
 // Verifică des (o singură comandă ieftină); după o cerere, și mai des câteva minute.
 const POLL_MS = 8_000;
 const FAST_POLL_MS = 2_000;
@@ -58,6 +62,9 @@ const BLOCKED = [
   "Bash(git push -f:*)", "Bash(git reset --hard:*)", "Bash(git clean:*)", "Bash(curl:*)", "Bash(Invoke-WebRequest:*)",
   // Fișierele de pe laptop nu au Coș din linia de comandă, deci nu se șterg niciodată.
   "Bash(rm:*)", "Bash(rmdir:*)", "Bash(del:*)", "Bash(erase:*)", "Bash(rd:*)", "Bash(Remove-Item:*)",
+  // Folderul punții (config.json are cookie-ul aplicației și cheia Team Vodă, plus lacătele) nu se citește și nu se scrie din Claude.
+  ...["Read", "Edit", "Write"].map((tool) => `${tool}(/${HERE_RULE}/**)`),
+  "Bash(cat:*)", "Bash(type:*)", "Bash(Get-Content:*)", "Bash(gc:*)", "Bash(node -e:*)", "Bash(node --eval:*)",
 ];
 
 const DEFAULTS = {
@@ -601,6 +608,7 @@ async function handle(config, cerere) {
         `Destinatar confirmat: ${cerere.confirmare?.destinatar ?? "(nespecificat)"}`,
         `Text confirmat:\n${cerere.confirmare?.text ?? ""}`,
         `Cererea inițială: ${cerere.cerere}`,
+        `Id-ul cererii (cid, pentru team-voda.mjs): ${cerere.id}`,
         "Fă acum exact ce a confirmat. Dacă e un mail și ai pregătit o ciornă, o trimiți doar dacă destinatarul și textul ei sunt exact cele de mai sus; dacă diferă cu ceva, nu trimiți și spui ce diferă. Dacă nu există ciornă, trimiți mailul cu exact textul confirmat. La final spune pe scurt ce ai făcut.",
       ].join("\n\n")
     : `Cerere de la Daniel, prin Argus (${new Date(cerere.creat).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" })}):\n\n${cerere.cerere}`;
@@ -614,7 +622,19 @@ async function handle(config, cerere) {
     : aboutWhatsApp && config.chrome !== false
       ? { kind: "wa" }
       : {};
-  let run = await runWarm(config, full, options);
+  if (send) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000 }));
+  let run;
+  try {
+    run = await runWarm(config, full, options);
+  } finally {
+    if (send && existsSync(TEAMVODA_GATE)) {
+      try {
+        unlinkSync(TEAMVODA_GATE);
+      } catch {
+        // expiră oricum după 10 minute
+      }
+    }
+  }
   // O aglomerare trecătoare se reîncearcă o dată, dar nu la trimiteri: acolo mesajul poate fi plecat deja.
   if (!run.ok && !send && TRANSIENT.test(run.text || "")) {
     log("Eroare trecătoare, reîncerc o dată:", (run.text || "").slice(0, 200));
