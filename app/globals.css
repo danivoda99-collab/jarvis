@@ -1690,3 +1690,123 @@ body {
   padding: 5px 12px;
   cursor: pointer;
 }
+
+/* Pagina de ajutor pentru echipă (/ajutor) */
+.help {
+  min-height: 100dvh;
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: var(--black);
+  color: var(--ivory);
+}
+
+.help-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.help-head h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+}
+
+.help-head p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ivory-muted);
+}
+
+.help-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.help-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.help-examples button,
+.help-escalate button {
+  font-size: 13px;
+  color: var(--ivory);
+  background: var(--black-soft);
+  border: 1px solid rgba(212, 166, 74, 0.35);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.help-msg {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  max-width: 88%;
+}
+
+.help-om {
+  align-self: flex-end;
+  background: rgba(212, 166, 74, 0.16);
+}
+
+.help-argus {
+  align-self: flex-start;
+  background: var(--black-soft);
+  border: 1px solid rgba(212, 166, 74, 0.18);
+}
+
+.help-wait {
+  color: var(--ivory-muted);
+}
+
+.help-escalate {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.help-escalate input,
+.help-form input {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  color: var(--ivory);
+  background: var(--black-soft);
+  border: 1px solid rgba(212, 166, 74, 0.3);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.help-form {
+  display: flex;
+  gap: 8px;
+}
+
+.help-form button {
+  font-size: 14px;
+  color: var(--black);
+  background: var(--gold);
+  border: none;
+  border-radius: 12px;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.help-form button:disabled {
+  opacity: 0.5;
+}
