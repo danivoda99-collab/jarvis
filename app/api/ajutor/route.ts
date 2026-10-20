@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { QueueError } from "@/lib/cereri";
-import { allowed, answer, tellDaniel, type Replica } from "@/lib/ajutor";
+import { allowed, answer, tellArgus, type Replica } from "@/lib/ajutor";
 
 // Pagina de ajutor e publică (o folosesc oamenii din echipă), deci fiecare adresă are o limită pe oră.
 export async function POST(request: Request) {
@@ -18,8 +18,13 @@ export async function POST(request: Request) {
     if (body.anunta) {
       if (!(await allowed(`anunta:${ip}`, 5))) return NextResponse.json({ error: "Ai trimis deja câteva întrebări. Daniel revine la tine." }, { status: 429 });
       const who = name || "cineva din echipă";
-      await tellDaniel(`Întrebare de la ${who}`, `${who} nu s-a descurcat în Team Vodă: „${question}”`, "Pagina de ajutor Team Vodă");
-      return NextResponse.json({ ok: true, raspuns: "Am trimis întrebarea lui Daniel. Îți răspunde el cât poate de repede." });
+      const history = Array.isArray(body.istoric) ? body.istoric.filter((item) => item && typeof item.text === "string").slice(-6) : [];
+      const talk = history.map((item) => `${item.rol === "om" ? who : "Asistent"}: ${item.text.slice(0, 400)}`).join("\n");
+      await tellArgus(
+        `Ajutor Team Vodă: ${who}`,
+        `${who} nu s-a descurcat în aplicație: „${question}”${talk ? `\n\nCe a vorbit cu asistentul:\n${talk}` : ""}\n\nOmul așteaptă un răspuns: pregătește-i pe WhatsApp explicația (CONFIRMARE), sau spune-i lui Daniel ce trebuie făcut.`,
+      );
+      return NextResponse.json({ ok: true, raspuns: "Am trimis mai departe. Primești răspuns pe WhatsApp cât de repede se poate." });
     }
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Ajutorul nu e pornit încă." }, { status: 500 });
     if (!(await allowed(ip, 30))) return NextResponse.json({ error: "Prea multe întrebări într-o oră. Încearcă puțin mai târziu." }, { status: 429 });

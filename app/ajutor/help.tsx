@@ -41,7 +41,7 @@ export default function Help({ name }: { name: string }) {
     void ask(draft);
   }
 
-  // „Nu m-am descurcat”: ultima întrebare a omului ajunge la Daniel.
+  // „Nu m-am descurcat”: ultima întrebare a omului ajunge la Argus (laptopul), care o rezolvă sau îl anunță pe Daniel.
   const lastQuestion = [...history].reverse().find((item) => item.rol === "om")?.text ?? "";
 
   return (
@@ -73,7 +73,7 @@ export default function Help({ name }: { name: string }) {
       {lastQuestion && !busy && (
         <div className="help-escalate">
           {!name && <input value={who} onChange={(event) => setWho(event.target.value)} placeholder="Numele tău" aria-label="Numele tău" />}
-          <button onClick={() => void ask(lastQuestion, true)}>Nu m-am descurcat, anunță-l pe Daniel</button>
+          <button onClick={() => void ask(lastQuestion, true)}>Nu m-am descurcat, vreau ajutor</button>
         </div>
       )}
       <form className="help-form" onSubmit={submit}>
