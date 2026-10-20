@@ -25,13 +25,13 @@ Săptămâna și termenele
 
 Câmpurile raportului (se numără ce s-a întâmplat în intervalul afișat)
 - Contacte: câți oameni ai sunat, chiar dacă n-ai stabilit întâlnire.
-- Int. Analiză (intenții de analiză): câte analize ai programat în intervalul afișat. O analiză programată în altă săptămână se trece la săptămâna aceea.
+- Int. Analiză (intenții de analiză): analizele programate, trecute în săptămâna în care are loc întâlnirea. De exemplu, marți stabilești o analiză pentru săptămâna viitoare: o treci la săptămâna viitoare.
 - Analiză: câte analize ai ținut efectiv în interval, chiar dacă omul n-a semnat nimic.
 - Int. Cons (intenții de consultanță): câte consultanțe ai stabilit.
 - Consultanțe: câte consultanțe ai ținut în interval.
 - Int. Cons. 2 / Cons. 2: întâlnirea de contract (stabilită / ținută).
-- Clienți / Contracte / UN semnate: ce s-a semnat. Câte unități (UN) are un contract îți spune liderul și le vezi pe platforma OVB.
-- Clienți / Contracte / Unități plătite: se trec la prima plată.
+- Clienți / Contracte / UN semnate: ce s-a semnat. UN înseamnă unități (nu le numi punctaj). Câte unități are un contract îți spune liderul și le vezi pe platforma OVB.
+- Clienți / Contracte / Unități plătite: se trec la prima plată, fiecare în câmpul lui (câți clienți, câte contracte, câte unități au plătit).
 - Recomandări clienți / colaboratori: câte persoane ai primit ca recomandare, cu număr de telefon.
 - Service: întâlnire cu un client existent (servisare).
 - Nu ești sigur unde trece ceva: întreabă-ți liderul înainte să trimiți.
@@ -68,7 +68,7 @@ Cel mai des
 - Dacă la trimitere apare o eroare de conexiune: aplicația reîncearcă singură și îți păstrează raportul; așteaptă confirmarea și nu închide pagina. Dacă apare „N-am putut trimite, raportul e păstrat…”, verifică semnalul și retrimite peste un minut, apoi uită-te în „Rapoartele tale” să nu fie trimis de două ori.`;
 
 const SYSTEM = `Ești Argus, asistentul echipei Voda (OVB Allfinanz), pe pagina de ajutor a aplicației Team Vodă.
-Răspunzi colaboratorilor, în română, cu diacritice, cu „tu”, cald și clar, scurt (cel mult 5 rânduri), la întrebări despre cum se completează aplicația și ce înseamnă câmpurile.
+Răspunzi colaboratorilor, în română, cu diacritice, cu „tu”, cald și clar, scurt (cel mult 5 rânduri), la întrebări despre cum se completează aplicația și ce înseamnă câmpurile. Scrii text simplu, fără markdown (fără steluțe, diezi sau liniuțe de listă).
 Folosești doar ghidul de mai jos. Dacă răspunsul nu e în ghid, spui sincer că nu știi sigur și îl rogi să apese „Nu m-am descurcat”: întrebarea ajunge la Argus, iar răspunsul apare tot aici, pe pagina de ajutor. Nu inventezi butoane, câmpuri sau reguli.
 Nu ceri și nu repeți coduri, parole sau date despre clienți (nume, CNP, sume). Nu vezi cifrele nimănui și nu completezi în locul omului.
 Nu răspunzi niciodată despre comisioane sau situații personale (ale lui sau ale altui coleg): îl încurajezi să fie curios și să meargă direct la persoana potrivită (liderul lui sau Daniel).
@@ -98,7 +98,9 @@ export async function answer(question: string, history: Replica[]) {
   // Conversația trebuie să înceapă cu omul.
   while (messages.length && messages[0].role !== "user") messages.shift();
   const response = await client.messages.create({ model: MODEL, max_tokens: 600, system, messages });
-  return response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
+  const text = response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
+  // Pagina afișează text simplu: fără steluțe de bold.
+  return text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/^#+\s*/gm, "");
 }
 
 // Cel mult `max` cereri pe oră de la aceeași adresă, ca pagina publică să nu poată fi folosită la nesfârșit.
