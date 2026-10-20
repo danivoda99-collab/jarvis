@@ -11,13 +11,16 @@ const MODEL = process.env.ARGUS_AJUTOR_MODEL || "claude-haiku-5-5";
 export const GHID = `Aplicația Team Vodă (raportarea colaboratorilor echipei Voda, OVB Allfinanz), după cum lucrează echipa (lămurit de Daniel, 20.10.2026):
 
 Intrarea
-- Intri cu numele tău (exact cum e în echipă) și codul tău personal. Codul nu se spune nimănui.
+- Intri cu numele tău (exact cum e în echipă) și codul tău personal, apoi „Intră”. Prima dată îți alegi singur codul; îl poți schimba din meniul ☰. Codul nu se spune nimănui.
 - Ai uitat codul: apeși „Am uitat codul” și primești un link pe email.
+- Nu-ți găsești numele în listă: spune-i liderului tău.
 
 Săptămâna și termenele
 - Săptămâna de raportare ține de sâmbătă până vineri.
 - Raportul de Tel party (activitatea săptămânii) se trimite sâmbătă până la 17:00. Se mai poate trimite până la 18, cel târziu 19; după aceea, nu.
 - Raportul de închideri: la fel. Doar în cazuri excepționale, anunțate dinainte, se poate accepta până duminică, dar e târziu.
+- Întâi îți pui Telul, apoi trimiți raportul. Toate câmpurile sunt obligatorii: pui 0 unde n-ai nimic.
+- O săptămână împărțită între două luni se raportează pe ambele părți („cealaltă parte” a săptămânii).
 - Raportul se adaugă la ce ai deja pe săptămâna aceea (nu înlocuiește). Poți raporta pentru săptămâna curentă și pentru cea trecută.
 
 Câmpurile raportului (se numără ce s-a întâmplat în intervalul afișat)
@@ -26,17 +29,20 @@ Câmpurile raportului (se numără ce s-a întâmplat în intervalul afișat)
 - Analiză: câte analize ai ținut efectiv în interval, chiar dacă omul n-a semnat nimic.
 - Int. Cons (intenții de consultanță): câte consultanțe ai stabilit.
 - Consultanțe: câte consultanțe ai ținut în interval.
-- Cons. 2: întâlnirea de contract.
+- Int. Cons. 2 / Cons. 2: întâlnirea de contract (stabilită / ținută).
 - Clienți / Contracte / UN semnate: ce s-a semnat. Câte unități (UN) are un contract îți spune liderul și le vezi pe platforma OVB.
 - Clienți / Contracte / Unități plătite: se trec la prima plată.
 - Recomandări clienți / colaboratori: câte persoane ai primit ca recomandare, cu număr de telefon.
 - Service: întâlnire cu un client existent (servisare).
+- Nu ești sigur unde trece ceva: întreabă-ți liderul înainte să trimiți.
 
 Corecturi
-- Ai greșit o cifră sau ai pus o activitate în săptămâna greșită: o corectezi singur, în aplicație, la rapoartele tale (alegi raportul, îl corectezi sau îl ștergi și îl trimiți din nou corect). Dacă nu ești sigur, întrebi aici; dacă tot nu se rezolvă, apeși „Nu m-am descurcat”.
+- Ai greșit o cifră sau ai pus o activitate în săptămâna greșită: o corectezi singur, din „Corectează un raport” (pentru săptămâna curentă și cea trecută; pentru una mai veche, spune-i liderului). Schimbi doar cifrele greșite sau ștergi raportul. Închiderile, Tel party (Realizat) și Panoul BL se actualizează singure.
+- Mesajul „Săptămâna nu e în luna curentă din Închideri”: raportul e salvat; anunță-ți liderul.
+- Dacă nu ești sigur, întrebi aici; dacă tot nu se rezolvă, apeși „Nu m-am descurcat”.
 
 Telul (obiectivele)
-- Telul ți-l stabilești de obicei singur; la început îl faci cu liderul tău, iar apoi se decide în ședință (Tel party).
+- Telul e obiectivul tău pe săptămână (analize, consultanțe, service). Ți-l stabilești de obicei singur; la început îl faci cu liderul tău, iar apoi se decide în ședință (Tel party).
 
 Secțiunile aplicației
 - Panoul meu: îți vezi progresul, rezultatele și cotele personale.
@@ -45,6 +51,7 @@ Secțiunile aplicației
 - Jurnal: propriul tău parcurs, training și silent hour.
 - Tel party: momentul în care ne întâlnim să ne stabilim telurile și programul; de aici vine și raportul.
 - Planul trimestrial: te ajută să ai claritate asupra acțiunilor pentru obiectivul tău și al echipei.
+- Service: contractele, unitățile și recomandările din service.
 
 Pozițiile
 - FT1, FT2, FT3: consultanți la început (financial trainee).
@@ -52,12 +59,12 @@ Pozițiile
 - GST / BL: manager de grup, respectiv executiv (BL-ul echipei e Daniel).
 
 Oameni noi
-- Pentru început, parcurgi „jocul” și ghidul.
+- Pentru început, parcurgi „jocul” din aplicație (Drumul tău) și ghidul.
 
 Cel mai des
 - Greșeala cea mai des întâlnită e neraportarea. Pune-ți o alarmă pentru sâmbătă. Când nu raportezi, te ascunzi după deget și nu vei ști să-ți susții și să-ți menții rezultatele bune.
-- Pentru orice altceva, întrebi liderul tău.
-- Dacă la trimitere apare o eroare de conexiune: aplicația reîncearcă singură și îți păstrează raportul; așteaptă confirmarea și nu închide pagina. Dacă tot nu merge, încearcă peste un minut sau apasă „Nu m-am descurcat”.`;
+- Pe cine întrebi: întâi asistentul de aici, apoi liderul tău, apoi Daniel.
+- Dacă la trimitere apare o eroare de conexiune: aplicația reîncearcă singură și îți păstrează raportul; așteaptă confirmarea și nu închide pagina. Dacă apare „N-am putut trimite, raportul e păstrat…”, verifică semnalul și retrimite peste un minut, apoi uită-te în „Rapoartele tale” să nu fie trimis de două ori.`;
 
 const SYSTEM = `Ești Argus, asistentul echipei Voda (OVB Allfinanz), pe pagina de ajutor a aplicației Team Vodă.
 Răspunzi colaboratorilor, în română, cu diacritice, cu „tu”, cald și clar, scurt (cel mult 5 rânduri), la întrebări despre cum se completează aplicația și ce înseamnă câmpurile.
