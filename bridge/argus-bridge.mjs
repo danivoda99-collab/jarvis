@@ -125,8 +125,8 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
 - Raportări cerute de Daniel („trece-i lui Stan 3 analize săptămâna asta”) merg doar prin aplicația Team Vodă, cu scriptul de lângă punte, niciodată direct în Sheet:
   1. „node team-voda.mjs ping” îți dă câmpurile permise (contacte, intAn, an, intCons, cons, intCons2, cons2, clSemn, ctrSemn, unSemn, clPlat, ctrPlat, unPlat, recCl, recCol, service). Dacă spune că intrarea nu e configurată, îi spui scurt lui Daniel că mai are de făcut pașii din Apps Script și te oprești.
   2. Numele exact îl iei din „_ConfigEchipa”. Săptămâna: weekStart = sâmbăta ei, „aaaa-ll-zz”. Citești ce a raportat deja omul pe săptămâna aceea, ca să știi dacă e o completare sau o corectură.
-  3. Pui CONFIRMARE cu titlul scurt („Raportez pentru Stan Adrian: 3 analize, săptămâna 17.10–23.10”) și un „tabel” cu câmpurile care se trimit (vechi → nou). Valorile din values sunt cele finale pe săptămână, nu doar diferența.
-  4. Doar după „Da”: „node team-voda.mjs raport '<JSON: name, weekStart, values, cid = id-ul cererii>'” (din folderul punții), o singură dată. Spui ce a răspuns aplicația; dacă a dat eroare, nu încerci altă cale.
+  3. Pui CONFIRMARE cu titlul scurt („Raportez pentru Stan Adrian: 3 analize, săptămâna 17.10–23.10”), un „tabel” cu câmpurile care se trimit (vechi → nou) și „teamvoda”: {"name": "<numele exact>", "weekStart": "aaaa-ll-zz", "values": {"an": 3}}, exact ce se trimite (pe telefon, tabelul arată aceste valori). Valorile din values sunt cele finale pe săptămână, nu doar diferența.
+  4. Doar după „Da”: „node team-voda.mjs raport '<JSON: name, weekStart, values, cid = id-ul cererii>'” (din folderul punții), o singură dată, cu exact name, weekStart și values din confirmare. Scriptul refuză orice altă valoare. Spui ce a răspuns aplicația; dacă a dat eroare, nu încerci altă cale.
   5. Obiectivele (Teluri) și orice alt tab nu le scrii: îi spui că le setează el în aplicație.
 Proiecte mari (o prezentare, un plan, un document, o ofertă, idei de proiect, o cercetare lungă):
 - Lucrezi cât e nevoie, fără să întrebi pe drum. Pentru părți independente (cercetare, scriere, verificare) poți porni subagenți (Task) și le aduni rezultatele.
@@ -592,6 +592,21 @@ function table(value) {
   return rows.length > 1 ? rows : undefined;
 }
 
+// Raportarea Team Vodă din CONFIRMARE: nume, săptămână (sâmbăta) și cifre întregi, cum se trimit.
+function teamVodaPayload(value) {
+  if (!value || typeof value !== "object" || typeof value.name !== "string" || !value.name.trim()) return undefined;
+  const week = value.weekStart ?? value.periodStart;
+  if (typeof week !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return undefined;
+  if (!value.values || typeof value.values !== "object") return undefined;
+  const values = {};
+  for (const [key, number] of Object.entries(value.values)) {
+    if (!/^[A-Za-z0-9]{1,20}$/.test(key) || !Number.isInteger(Number(number))) return undefined;
+    values[key] = Number(number);
+  }
+  if (!Object.keys(values).length) return undefined;
+  return { name: value.name.trim(), [value.weekStart ? "weekStart" : "periodStart"]: week, values };
+}
+
 // Rezultatul final nu are voie să se piardă dacă internetul sau serverul cade exact atunci: reîncercăm câteva minute.
 async function report(config, body) {
   for (const delay of [2, 5, 10, 20, 40, 60, 90]) {
@@ -638,12 +653,14 @@ async function handle(config, cerere) {
       : PROJECT.test(`${cerere.cerere} ${cerere.titlu}`)
         ? { timeout: PROJECT_TIMEOUT_MS }
         : {};
-  if (send) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000 }));
+  // Lacătul Team Vodă se deschide doar pentru raportarea exactă din confirmare (nume, săptămână, cifre).
+  const teamvoda = send ? teamVodaPayload(cerere.confirmare?.teamvoda) : undefined;
+  if (teamvoda) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000, payload: teamvoda }));
   let run;
   try {
     run = await runWarm(config, full, options);
   } finally {
-    if (send && existsSync(TEAMVODA_GATE)) {
+    if (teamvoda && existsSync(TEAMVODA_GATE)) {
       try {
         unlinkSync(TEAMVODA_GATE);
       } catch {
@@ -665,6 +682,7 @@ async function handle(config, cerere) {
   }
   const { text, confirmare } = splitConfirmation(run.text);
   if (confirmare && !send) {
+    const teamvoda = teamVodaPayload(confirmare.teamvoda);
     await report(config, {
       id: cerere.id,
       status: "așteaptă confirmare",
@@ -675,7 +693,16 @@ async function handle(config, cerere) {
         // Fereastra de pe telefon nu rămâne goală: dacă lipsește textul, pune rezumatul.
         text: String(confirmare.text || text.slice(0, 500)),
         destinatar: confirmare.destinatar ? String(confirmare.destinatar) : undefined,
-        tabel: table(confirmare.tabel),
+        // La Team Vodă, tabelul îl face puntea din ce pleacă efectiv, ca Daniel să confirme exact cifrele trimise.
+        tabel: teamvoda
+          ? [
+              ["Câmp", "Se trimite"],
+              ["Nume", teamvoda.name],
+              ["Săptămâna din", teamvoda.weekStart ?? teamvoda.periodStart],
+              ...Object.entries(teamvoda.values).map(([key, value]) => [key, String(value)]),
+            ]
+          : table(confirmare.tabel),
+        teamvoda,
       },
     });
     log("Aștept confirmarea lui Daniel:", cerere.titlu, `(${Math.round((Date.now() - started) / 1000)} s)`);
