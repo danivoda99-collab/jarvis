@@ -2,7 +2,7 @@
 // Cheia și adresa stau doar în config.json („teamVoda”: {"url": "...", "secret": "..."}), nu ajung la model.
 // Folosire: node team-voda.mjs ping
 //           node team-voda.mjs raport '{"name":"…","weekStart":"2026-10-17","values":{"an":2},"cid":"…"}'
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,25 @@ if (action === "raport") {
   }
   if (!payload?.name || !(payload.weekStart || payload.periodStart) || typeof payload.values !== "object") {
     fail("Raportarea are nevoie de name, weekStart (sâmbăta, aaaa-ll-zz) și values.");
+  }
+}
+
+// Raportarea pleacă doar dacă puntea a deschis lacătul pentru exact această cerere, după „Da”; lacătul se folosește o dată.
+if (action === "raport") {
+  const gateFile = join(HERE, "gate-teamvoda.json");
+  let gate = null;
+  try {
+    gate = existsSync(gateFile) ? JSON.parse(readFileSync(gateFile, "utf8")) : null;
+  } catch {
+    gate = null;
+  }
+  if (!gate || gate.cid !== payload.cid || !(Date.now() < gate.until)) {
+    fail("Raportarea pleacă doar după „Da”-ul lui Daniel, pentru cererea confirmată (cid).");
+  }
+  try {
+    unlinkSync(gateFile);
+  } catch {
+    // dacă nu se poate scoate, expiră singur
   }
 }
 
