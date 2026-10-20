@@ -56,6 +56,10 @@ export async function command<T>(...args: (string | number)[]): Promise<T> {
     headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
     body: JSON.stringify(args),
     cache: "no-store",
+    // Redis răspunde în milisecunde; dacă se blochează, nu ținem cererea agățată.
+    signal: AbortSignal.timeout(15_000),
+  }).catch(() => {
+    throw new QueueError("Coada nu răspunde. Mai încearcă.");
   });
   const data = (await response.json().catch(() => ({}))) as { result?: T; error?: string };
   if (!response.ok || data.error) throw new QueueError("Coada nu răspunde. Mai încearcă.");
