@@ -48,6 +48,19 @@ if (action === "raport") {
   if (!gate || gate.cid !== payload.cid || !(Date.now() < gate.until)) {
     fail("Raportarea pleacă doar după „Da”-ul lui Daniel, pentru cererea confirmată (cid).");
   }
+  // Pleacă doar exact ce a văzut și a confirmat Daniel: același nume, aceeași săptămână, aceleași cifre.
+  const confirmed = gate.payload;
+  const same = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort());
+  const values = Object.fromEntries(Object.entries(payload.values).map(([key, value]) => [key, Number(value)]));
+  if (
+    !confirmed ||
+    confirmed.name !== String(payload.name).trim() ||
+    confirmed.weekStart !== payload.weekStart ||
+    confirmed.periodStart !== payload.periodStart ||
+    !same(confirmed.values, values)
+  ) {
+    fail("Raportarea diferă de cea confirmată de Daniel (nume, săptămână sau cifre), deci nu pleacă.");
+  }
   try {
     unlinkSync(gateFile);
   } catch {

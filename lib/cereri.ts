@@ -14,7 +14,14 @@ export type Cerere = {
   actualizat: string;
   rezultat?: string;
   // Ce vrea Claude să facă și are nevoie de „Da” (un mail, un mesaj): textul exact și destinatarul.
-  confirmare?: { titlu: string; text: string; destinatar?: string; tabel?: string[][] };
+  confirmare?: {
+    titlu: string;
+    text: string;
+    destinatar?: string;
+    tabel?: string[][];
+    // O raportare Team Vodă: exact ce pleacă după „Da” (laptopul refuză orice altceva).
+    teamvoda?: { name: string; weekStart?: string; periodStart?: string; values: Record<string, number> };
+  };
   sesiune?: string;
   // Grafice, tabele, bare de progres trimise de laptop odată cu rezultatul.
   vizual?: Vizual;
