@@ -25,6 +25,8 @@ export type Cerere = {
   sesiune?: string;
   // Grafice, tabele, bare de progres trimise de laptop odată cu rezultatul.
   vizual?: Vizual;
+  // La ce pas e laptopul cât lucrează („Pasul 2 din 5: caută pe internet”), pentru ecranul „Lucrări”.
+  progres?: string;
 };
 
 const LIST = "argus:cereri";
