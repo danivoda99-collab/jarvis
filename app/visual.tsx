@@ -22,6 +22,17 @@ function Points({ items }: { items: NonNullable<Vizual["puncte"]> }) {
               {item.nivel !== "info" && <span className="viz-point-tag">{NIVEL[item.nivel]}</span>}
             </div>
             {item.text && <span className="viz-point-text">{item.text}</span>}
+            {item.mesaj && (
+              <div className="viz-point-draft">
+                <span className="viz-point-draft-text">„{item.mesaj.text}”</span>
+                <button
+                  className="viz-point-send"
+                  onClick={() => window.dispatchEvent(new CustomEvent("argus-trimite", { detail: item.mesaj }))}
+                >
+                  Trimite pe WhatsApp
+                </button>
+              </div>
+            )}
           </div>
         </li>
       ))}

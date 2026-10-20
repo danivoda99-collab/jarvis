@@ -935,7 +935,7 @@ async function checkAlerts(config) {
       `Acum e ${now}. Verificare automată pentru alerte; Daniel nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
       "Verifici, repede:",
       "1. Gmail: mailurile necitite din ultimele 3 ore. Important = un om real îi cere ceva lui Daniel, un termen azi sau mâine, ceva de la OVB sau de la echipă. Reclamele, newsletterele și notificările automate nu contează. Un mail de la un client OVB îl spui doar ca „mail de la un client”, fără nume sau detalii.",
-      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”): după ora 20, cine n-a raportat azi; oricând, cine n-a raportat nici în ultimele 2 zile lucrătoare (cheie echipa:2zile-<prenume>).",
+      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”): cine n-a raportat nici în ultimele 2 zile lucrătoare (cheie echipa:2zile-<prenume>). Cine n-a raportat azi intră în rezumatul de seară al echipei, nu aici.",
       "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget (cheie buget:<categorie>, fără procent în cheie).",
       `Ce a fost deja anunțat (nu repeta): ${state.trimise.filter((item) => alreadySent(item, now.slice(0, 10))).map((item) => item.cheie).join(", ") || "nimic"}.`,
       "Respecți ce scrie în memorie.md despre alerte (de exemplu ce nu vrea Daniel să primească).",
@@ -1010,6 +1010,51 @@ async function weeklyReport(config) {
   state.facut = today.date;
   writeFileSync(WEEKLY_FILE, JSON.stringify(state, null, 2));
   log("Raportul de luni a plecat pe telefon.");
+}
+
+// ——— Agentul de echipă: în zilele lucrătoare, seara, laptopul vede cine e în urmă sau n-a raportat
+// și îi propune lui Daniel câte un mesaj pentru fiecare; pe telefon, sub fiecare om, „Trimite pe WhatsApp” (după „Da”). ———
+const COACH_FILE = join(HERE, "echipa-seara.json");
+
+function loadCoach() {
+  try {
+    return JSON.parse(readFileSync(COACH_FILE, "utf8"));
+  } catch {
+    return { facut: "", incercat: 0 };
+  }
+}
+
+async function teamCoach(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const state = loadCoach();
+  // Ora o poate schimba Daniel: în config.json, „echipaOra”: 19 (implicit). Doar luni–vineri, o dată pe zi.
+  const from = Number.isInteger(config.echipaOra) ? config.echipaOra : 19;
+  if (["Sat", "Sun"].includes(today.weekday) || hour < from || hour >= 22 || state.facut === today.date) return;
+  if (Date.now() - (state.incercat || 0) < 60 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(COACH_FILE, JSON.stringify(state, null, 2));
+  log("Fac rezumatul de seară al echipei.");
+  const run = await runClaude(
+    config,
+    [
+      `Azi e ${today.date}, seara. Rezumat automat al echipei; Daniel nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
+      "Datele: dacă „node team-voda.mjs ping” (din folderul punții) răspunde ok, citești din aplicația Team Vodă cu „node team-voda.mjs call '{\"fn\":\"AR_mgLista\",\"args\":[\"Voda\",\"\"]}'” (lista echipei din Management, cu starea fiecăruia); altfel din centralizator, doar Raportari, Teluri și _ConfigEchipa, niciodată Inchideri sau Service. Săptămâna echipei e sâmbătă–vineri.",
+      "Vrei: cine n-a raportat azi, cine e mult sub obiectivul săptămânii (Tel) față de cât a trecut din săptămână, și cine a făcut ceva foarte bun azi (merită o vorbă bună). Cel mult 5 oameni, cei mai importanți întâi.",
+      "Pentru fiecare, un mesaj scurt de la Daniel, pe WhatsApp, cald și direct, pe tonul lui (vezi memorie.md), fără reproșuri, cu o întrebare sau un pas concret (de exemplu „Salut Cornel! N-am văzut raportul de azi. Ai avut întâlniri? Trece-le până diseară, să te văd în top.”). Fără cifre de clienți și fără date despre clienți. Numele din „catre” e exact numele din WhatsApp, din contacte.md; dacă nu-l găsești acolo, scrii numele din echipă.",
+      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Azi n-au raportat Cornel și Ana; Mihai e la jumătate din obiectiv; Ioana a făcut 3 analize.”). Apoi rândul VIZUAL cu „puncte”: titlu = numele, text = situația lui într-o frază scurtă, nivel = urgent (n-a raportat), important (în urmă) sau info (laudă), mesaj = {\"catre\": \"<nume WhatsApp>\", \"text\": \"<mesajul>\"}. După rândul VIZUAL nu mai scrii nimic. Dacă toți au raportat și sunt pe drumul bun, primul rând spune asta, iar punctele sunt cel mult 2 laude.",
+    ].join("\n\n"),
+  );
+  if (!run.ok) {
+    noteLimit(run.text);
+    log("Rezumatul de seară n-a mers, reîncerc peste o oră.");
+    return;
+  }
+  const { text, vizual } = splitVisual(run.text);
+  await api(config, "POST", { titlu: "Echipa azi", cerere: "Rezumatul de seară al echipei", rezultat: text, vizual });
+  state.facut = today.date;
+  writeFileSync(COACH_FILE, JSON.stringify(state, null, 2));
+  log("Rezumatul de seară a plecat pe telefon.");
 }
 
 function loadPreps() {
@@ -1120,6 +1165,7 @@ function runChores(config) {
     if (config.pregatire !== false) await prepareMeetings(config);
     if (config.alerte !== false) await checkAlerts(config);
     if (config.raportLuni !== false) await weeklyReport(config);
+    if (config.echipaSeara !== false) await teamCoach(config);
   })()
     .catch((error) => log("Treburile automate n-au mers:", error.message))
     .finally(() => (chores = false));

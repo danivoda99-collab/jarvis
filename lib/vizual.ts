@@ -8,7 +8,9 @@ export type Bare = { titlu?: string; unitate?: string; legenda?: string[]; eleme
 export type Serie = { nume: string; valori: number[] };
 export type Linie = { titlu?: string; unitate?: string; etichete: string[]; serii: Serie[] };
 export type Nivel = "urgent" | "important" | "info";
-export type Punct = { titlu: string; text?: string; nivel: Nivel };
+// Un punct poate avea un mesaj gata scris (de exemplu pentru un om din echipă), trimis pe WhatsApp după „Da”.
+export type Mesaj = { catre: string; text: string };
+export type Punct = { titlu: string; text?: string; nivel: Nivel; mesaj?: Mesaj };
 
 export type Vizual = {
   puncte?: Punct[];
@@ -43,7 +45,9 @@ export function cleanVizual(input: unknown): Vizual | undefined {
     .map(record)
     .map((item) => {
       const nivel = text(item.nivel, 12).toLowerCase() as Nivel;
-      return { titlu: text(item.titlu, 40), text: text(item.text, 120) || undefined, nivel: ORDINE.includes(nivel) ? nivel : "info" };
+      const draft = record(item.mesaj);
+      const mesaj = text(draft.catre, 60) && text(draft.text, 600) ? { catre: text(draft.catre, 60), text: text(draft.text, 600) } : undefined;
+      return { titlu: text(item.titlu, 40), text: text(item.text, 120) || undefined, nivel: ORDINE.includes(nivel) ? nivel : "info", mesaj };
     })
     .filter((item) => item.titlu)
     .map((item, index) => ({ item, index }))
