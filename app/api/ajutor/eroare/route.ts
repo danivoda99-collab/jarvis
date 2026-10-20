@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { command } from "@/lib/cereri";
 import { once, tellArgus, tellDaniel } from "@/lib/ajutor";
@@ -26,31 +26,38 @@ export async function POST(request: Request) {
   const screen = String(body.ecran ?? "").trim().slice(0, 60) || "aplicație";
   const error = String(body.eroare ?? "").trim().slice(0, 300);
   if (!error) return NextResponse.json({ ok: false, error: "Lipsește eroarea." }, { status: 400 });
-  const now = Date.now();
-  await command("LPUSH", "ajutor:erori", JSON.stringify({ cand: new Date(now).toISOString(), cine: who, ecran: screen, eroare: error }));
-  await command("LTRIM", "ajutor:erori", 0, 199);
+  // Aplicația primește „ok” pe loc; notarea și treaba pentru laptop se fac după răspuns.
+  after(async () => {
+    try {
+      const now = Date.now();
+      await command("LPUSH", "ajutor:erori", JSON.stringify({ cand: new Date(now).toISOString(), cine: who, ecran: screen, eroare: error }));
+      await command("LTRIM", "ajutor:erori", 0, 199);
 
-  if (NETWORK.test(error)) {
-    // Câți oameni diferiți au pierdut conexiunea în ultima jumătate de oră.
-    await command("ZADD", "ajutor:retea", now, `${who}|${now}`);
-    await command("ZREMRANGEBYSCORE", "ajutor:retea", 0, now - WINDOW_MS);
-    const recent = await command<string[]>("ZRANGEBYSCORE", "ajutor:retea", now - WINDOW_MS, now);
-    const people = new Set(recent.map((item) => item.split("|")[0]));
-    if (people.size >= 3 && (await once("retea", 2 * 60 * 60))) {
-      await tellDaniel(
-        `Problemă în Team Vodă: ${people.size} oameni nu pot trimite`,
-        `În ultima jumătate de oră, ${people.size} oameni (${[...people].slice(0, 5).join(", ")}) au pierdut conexiunea cu aplicația la trimitere. Cel mai probabil e aglomerație la Google sau internet slab; aplicația le păstrează formularul, dar spune-le să reîncerce peste câteva minute.`,
-        "Monitorizarea erorilor Team Vodă",
-      );
-      await tellArgus(
-        "Team Vodă: mai mulți nu pot trimite",
-        `${people.size} oameni au pierdut conexiunea la trimitere în ultima jumătate de oră (${[...people].slice(0, 5).join(", ")}). Daniel a primit deja alerta. Află cauza și verifică pentru fiecare dacă raportul a ajuns sau nu; rezultatul îl începi cu „DANIEL:” și spui cine trebuie să retrimită.`,
-      );
+      if (NETWORK.test(error)) {
+        // Câți oameni diferiți au pierdut conexiunea în ultima jumătate de oră.
+        await command("ZADD", "ajutor:retea", now, `${who}|${now}`);
+        await command("ZREMRANGEBYSCORE", "ajutor:retea", 0, now - WINDOW_MS);
+        const recent = await command<string[]>("ZRANGEBYSCORE", "ajutor:retea", now - WINDOW_MS, now);
+        const people = new Set(recent.map((item) => item.split("|")[0]));
+        if (people.size >= 3 && (await once("retea", 2 * 60 * 60))) {
+          await tellDaniel(
+            `Problemă în Team Vodă: ${people.size} oameni nu pot trimite`,
+            `În ultima jumătate de oră, ${people.size} oameni (${[...people].slice(0, 5).join(", ")}) au pierdut conexiunea cu aplicația la trimitere. Cel mai probabil e aglomerație la Google sau internet slab; aplicația le păstrează formularul, dar spune-le să reîncerce peste câteva minute.`,
+            "Monitorizarea erorilor Team Vodă",
+          );
+          await tellArgus(
+            "Team Vodă: mai mulți nu pot trimite",
+            `${people.size} oameni au pierdut conexiunea la trimitere în ultima jumătate de oră (${[...people].slice(0, 5).join(", ")}). Daniel a primit deja alerta. Află cauza și verifică pentru fiecare dacă raportul a ajuns sau nu; rezultatul îl începi cu „DANIEL:” și spui cine trebuie să retrimită.`,
+          );
+        }
+        return;
+      }
+      if (await once(`eroare:${screen}:${error.slice(0, 80)}`, 2 * 60 * 60)) {
+        await tellArgus(`Eroare Team Vodă: ${screen}`, `${who} a primit o eroare în „${screen}” (${new Date(now).toISOString()}): ${error}`);
+      }
+    } catch (caught) {
+      console.error("ajutor/eroare", caught);
     }
-    return NextResponse.json({ ok: true });
-  }
-  if (await once(`eroare:${screen}:${error.slice(0, 80)}`, 2 * 60 * 60)) {
-    await tellArgus(`Eroare Team Vodă: ${screen}`, `${who} a primit o eroare în „${screen}” (${new Date(now).toISOString()}): ${error}`);
-  }
+  });
   return NextResponse.json({ ok: true });
 }
