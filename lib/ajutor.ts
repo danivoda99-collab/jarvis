@@ -27,7 +27,7 @@ export const GHID = `Aplicația Team Vodă (raportarea colaboratorilor echipei V
 
 const SYSTEM = `Ești Argus, asistentul echipei Voda (OVB Allfinanz), pe pagina de ajutor a aplicației Team Vodă.
 Răspunzi colaboratorilor, în română, cu diacritice, scurt (cel mult 5 rânduri), prietenos și clar, la întrebări despre cum se completează aplicația.
-Folosești doar ghidul de mai jos. Dacă răspunsul nu e în ghid, spui sincer că nu știi sigur și îl rogi să apese „Nu m-am descurcat”, ca să ajungă întrebarea la Daniel. Nu inventezi butoane, câmpuri sau reguli.
+Folosești doar ghidul de mai jos. Dacă răspunsul nu e în ghid, spui sincer că nu știi sigur și îl rogi să apese „Nu m-am descurcat”: întrebarea ajunge la Argus, iar răspunsul apare tot aici, pe pagina de ajutor. Nu inventezi butoane, câmpuri sau reguli.
 Nu ceri și nu repeți coduri, parole sau date despre clienți (nume, CNP, sume). Nu vezi cifrele nimănui și nu completezi în locul omului.
 Nu vorbești despre alte subiecte decât aplicația și raportarea; pentru restul, îl trimiți la Daniel.
 
@@ -36,15 +36,25 @@ ${GHID}`;
 
 export type Replica = { rol: "om" | "argus"; text: string };
 
+// Ce a învățat Argus rezolvând întrebările la care ghidul n-a știut (liniile „GHID:” din rezultatele laptopului).
+const LEARNED = "ajutor:ghid";
+const LEARNED_MAX = 150;
+
+export async function learned() {
+  return (await command<string[]>("LRANGE", LEARNED, 0, LEARNED_MAX - 1)).reverse();
+}
+
 export async function answer(question: string, history: Replica[]) {
   const client = new Anthropic();
+  const extra = await learned().catch(() => []);
+  const system = extra.length ? `${SYSTEM}\n\nLămuriri adăugate după întrebări reale (au întâietate):\n${extra.map((line) => `- ${line}`).join("\n")}` : SYSTEM;
   const messages: Anthropic.MessageParam[] = [
     ...history.slice(-6).map((item) => ({ role: item.rol === "om" ? ("user" as const) : ("assistant" as const), content: item.text.slice(0, 1500) })),
     { role: "user", content: question },
   ];
   // Conversația trebuie să înceapă cu omul.
   while (messages.length && messages[0].role !== "user") messages.shift();
-  const response = await client.messages.create({ model: MODEL, max_tokens: 600, system: SYSTEM, messages });
+  const response = await client.messages.create({ model: MODEL, max_tokens: 600, system, messages });
   return response.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("").trim();
 }
 
@@ -68,7 +78,45 @@ const LAPTOP_RULES = [
   "Nu schimbi codul aplicației Team Vodă: dacă trebuie o schimbare, pregătești textul complet pentru conversația aplicației și i-l dai lui Daniel.",
   "Orice scriere (corectură în raportul cuiva, mesaj pe WhatsApp către om) trece prin CONFIRMARE, cu textul exact, ca Daniel să dea un singur Accept.",
   "Rezultatul: dacă Daniel trebuie să facă sau să decidă ceva, îl începi cu „DANIEL:” și spui scurt ce trebuie; altfel scrii pe scurt ce ai găsit și ce ai făcut, pentru jurnal, fără să-l anunți.",
+  "Răspunsul pentru om: o linie „OMULUI <bilet>: textul” (biletul e dat mai jos) apare pe pagina lui de ajutor. Scurt, cu tu, fără cifrele altora și fără date de clienți. Dacă nu știi răspunsul, nu ghicești: îi spui lui Daniel (DANIEL: X întreabă …, ce să-i spun?), iar când îți răspunde, scrii linia OMULUI cu același bilet.",
+  "Ce ar trebui să știe asistentul data viitoare (o regulă generală a aplicației sau a echipei, nu despre un om anume): o linie „GHID: …”, o propoziție.",
 ].join("\n");
+
+// Liniile din rezultatul laptopului: „OMULUI <bilet>: …” merge pe pagina omului, „GHID: …” în ghidul învățat.
+const BILET = (id: string) => `ajutor:bilet:${id}`;
+const BILET_TTL = 30 * 24 * 60 * 60;
+
+export async function deliverLines(result: string) {
+  for (const line of result.split("\n")) {
+    const reply = line.match(/^\s*OMULUI\s+([0-9a-f-]{36})\s*:\s*(.+)$/i);
+    if (reply) {
+      const current = await command<string | null>("GET", BILET(reply[1]));
+      if (!current) continue;
+      const ticket = JSON.parse(current) as Bilet;
+      await command("SET", BILET(reply[1]), JSON.stringify({ ...ticket, raspuns: reply[2].trim().slice(0, 1500), cand: new Date().toISOString() }), "EX", BILET_TTL);
+      continue;
+    }
+    const lesson = line.match(/^\s*GHID\s*:\s*(.+)$/i);
+    if (lesson) {
+      await command("LPUSH", LEARNED, lesson[1].trim().slice(0, 300));
+      await command("LTRIM", LEARNED, 0, LEARNED_MAX - 1);
+    }
+  }
+}
+
+export type Bilet = { intrebare: string; raspuns?: string; cand?: string };
+
+export async function openTicket(question: string) {
+  const id = crypto.randomUUID();
+  await command("SET", BILET(id), JSON.stringify({ intrebare: question.slice(0, 300) }), "EX", BILET_TTL);
+  return id;
+}
+
+export async function readTicket(id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const value = await command<string | null>("GET", BILET(id));
+  return value ? (JSON.parse(value) as Bilet) : null;
+}
 
 // Ajunge întâi la laptop (Argus rezolvă singur); pe Daniel îl anunță doar ce are nevoie de el.
 export async function tellArgus(title: string, details: string) {

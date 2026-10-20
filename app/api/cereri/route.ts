@@ -3,6 +3,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { firstSentence, markOpen, notify } from "@/lib/push";
 import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, type Cerere, type Status } from "@/lib/cereri";
 import { cleanVizual } from "@/lib/vizual";
+import { deliverLines } from "@/lib/ajutor";
 
 // Cererile pentru Claude de pe laptop. Telefonul și laptopul sunt logate amândouă cu codul lui Daniel.
 
@@ -110,6 +111,8 @@ export async function PATCH(request: Request) {
     const forDaniel = updated.status === "gata" && /^\s*DANIEL:/.test(updated.rezultat ?? "");
     if (forDaniel) updated.rezultat = (updated.rezultat ?? "").replace(/^\s*DANIEL:\s*/, "");
     await saveCerere(updated);
+    // Răspunsurile pentru oamenii de pe pagina de ajutor și ce învață asistentul.
+    if (updated.status === "gata" && updated.rezultat) await deliverLines(updated.rezultat).catch(() => undefined);
     if (updated.status === "gata" && (!updated.liniste || forDaniel)) await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);
     if (updated.status === "eroare") await notify(`N-a mers: ${updated.titlu}`, firstSentence(updated.rezultat), updated.id);
     if (updated.status === "așteaptă confirmare") {
