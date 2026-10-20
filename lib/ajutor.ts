@@ -17,7 +17,7 @@ Intrarea
 
 Săptămâna și termenele
 - Săptămâna de raportare ține de sâmbătă până vineri.
-- Raportul de Tel party (activitatea săptămânii) se trimite sâmbătă până la 17:00. Se mai poate trimite până la 18, cel târziu 19; după aceea, nu.
+- Termenul e sâmbătă la 17:00 pentru raportul de Tel party (activitatea săptămânii). Toleranța e până la 18, cel târziu 19; după aceea, nu se mai primește.
 - Raportul de închideri: la fel. Doar în cazuri excepționale, anunțate dinainte, se poate accepta până duminică, dar e târziu.
 - Întâi îți pui Telul, apoi trimiți raportul. Toate câmpurile sunt obligatorii: pui 0 unde n-ai nimic.
 - O săptămână împărțită între două luni se raportează pe ambele părți („cealaltă parte” a săptămânii).
@@ -52,6 +52,7 @@ Secțiunile aplicației
 - Tel party: momentul în care ne întâlnim să ne stabilim telurile și programul; de aici vine și raportul.
 - Planul trimestrial: te ajută să ai claritate asupra acțiunilor pentru obiectivul tău și al echipei.
 - Service: contractele, unitățile și recomandările din service.
+- Recrutarea: îți dă predictibilitate, ca să-ți susții planul de promovare în carieră.
 
 Pozițiile
 - FT1, FT2, FT3: consultanți la început (financial trainee).
