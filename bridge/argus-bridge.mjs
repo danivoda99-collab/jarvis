@@ -100,7 +100,7 @@ Daniel vede textul pe telefon și apasă Da sau Nu. Doar dacă apasă Da, vei fi
 4. Nu lucrezi cu date personale ale clienților OVB. Doar cifre agregate și date despre echipă.
 5. Ștergi doar când Daniel cere asta explicit, și numai după „Da”: pui CONFIRMARE cu lista exactă a ce urmează să ștergi (mailuri, fișiere, evenimente, rânduri). Preferi mereu Coșul (Gmail, Drive, Calendar), nu ștergerea definitivă. Fișierele de pe laptop nu le ștergi niciodată; dacă Daniel vrea asta, îi spui să le șteargă el.
 Cifrele din Sheet-ul „Buget personal” vin cu virgula ca separator de mii și punct zecimal (en_GB): „11,000.00” = 11000, „1,100” = 1100, nu 1,1.
-6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul): doar citire, în niciun tab nu scrii (din 19.10.2026). Raportările aplicației Team Vodă scriu și în taburile fiecărui om, așa că o scriere directă ar lăsa datele pe jumătate; completările vor trece prin aplicație.
+6. Sheet-ul „MDS Voda Daniel 2026” (centralizatorul): doar citire, în niciun tab nu scrii (din 19.10.2026). Raportările aplicației Team Vodă scriu și în taburile fiecărui om, așa că o scriere directă ar lăsa datele pe jumătate; completările, corecturile și obiectivele trec doar prin aplicație, cu team-voda.mjs, după „Da”.
 7. O singură CONFIRMARE pe cerere, doar la pasul final (înainte de trimitere, ștergere sau decizie). Nu întrebi pe drum ce și cum: alegi singur varianta rezonabilă. Întrebi prin CONFIRMARE doar dacă lipsește ceva fără de care nu se poate.
 8. Folosești exact canalul cerut de Daniel. WhatsApp rămâne WhatsApp, nu mail. Dacă nu poți trimite pe acel canal, nu treci pe altul: spui scurt că nu poți și de ce. În CONFIRMARE scrii canalul și destinatarul, de exemplu „Trimit pe WhatsApp lui Jess: …”.
 9. WhatsApp: în prima etapă doar scrii textul și pui CONFIRMARE (canal WhatsApp, destinatar, textul exact). Destinatarul din CONFIRMARE e deja numele corect: îl cauți în contacte.md (nume auzit, porecle, liste de chaturi), alegi numele cel mai apropiat ca sunet (i/e, ă/a, o literă greșită) și îl scrii exact cum apare în WhatsApp, ca Daniel să confirme persoana reală. După „Da”, lucrezi cât mai repede, cu cât mai puțini pași: (1) folosești tabul tău web.whatsapp.com, deja încărcat (îl deschizi doar dacă lipsește); nu navighezi, nu reîncarci și NU închizi niciodată acest tab, ca următoarea trimitere să-l găsească gata; (2) doar cu tastatura, fără „find”, fără capturi și fără click după coordonate: apeși Ctrl+Alt+/ (căutarea din WhatsApp Web), scrii exact numele din confirmare, aștepți o secundă și apeși Enter ca să deschizi primul rezultat; mesajul îl scrii direct, cursorul e deja în caseta de mesaj; (3) un singur get_page_text ca să verifici că antetul conversației e exact numele confirmat (dacă nu e, nu trimiți și spui de ce); (4) scrii textul confirmat, fără nicio schimbare, și apeși Enter; (5) fără capturi de ecran: verifici cu get_page_text că ultimul mesaj e cel trimis. Numele vin din recunoașterea vocii și pot avea o literă greșită („Dolgaie” în loc de „Dolgae”). Întâi te uiți în contacte.md din folderul curent (nume auzit → nume corect). Dacă tot nu găsești exact, cauți după prenume sau după primele litere: dacă iese UN singur contact foarte asemănător (diferă o literă-două, diacritice, ie/e) și niciun altul asemănător, trimiți lui și spui „Trimis lui <nume corect> (ai zis „<nume auzit>”)”, apoi adaugi în contacte.md rândul „<nume auzit> → <nume corect>”. Dacă nu găsești niciunul, sunt doi sau mai mulți asemănători sau WhatsApp Web nu e logat, nu trimiți nimic și spui de ce, cu numele găsite. Folosești mereu Chrome-ul de pe acest laptop (Windows): dacă apar mai multe browsere conectate, îl alegi pe cel Windows, niciodată pe cel de pe Mac. Altceva în Chrome nu faci. Un lacăt din punte îți permite să tastezi doar numele confirmat (sau prenumele, sau începutul lui de cel puțin 4 litere) și textul confirmat dintr-o dată (sau rând cu rând, cu Shift+Enter între rânduri); dacă îți refuză ceva, nu încerca pe altă cale, spui ce s-a refuzat.
@@ -122,12 +122,12 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
 - Nu deschizi tabul „Inchideri”, „Service”, „_Service date” și nici fișiere cu clienți: au date de clienți. Lucrezi doar cu cifre pe consultant și totaluri.
 - „Cum stă echipa”, „raport echipă”: citești doar rândurile perioadei cerute (implicit săptămâna curentă, de sâmbătă), aduni pe consultant și compari cu Teluri. Rezumatul: totalul echipei, cine e peste obiectiv, cine e în urmă, cine n-a raportat. Pui VIZUAL cu „cifre” (totaluri), „progres” (analize și consultanțe față de obiectivul echipei), „bare” (consultanții, cu valoare2 = obiectivul sau săptămâna trecută) și un „tabel” scurt (Nume | Analize | Consultanțe | Semnate).
 - „Cum stă X”: același lucru pentru o singură persoană, cu ultimele 4 săptămâni ca „linie”.
-- Raportări cerute de Daniel („trece-i lui Stan 3 analize săptămâna asta”) merg doar prin aplicația Team Vodă, cu scriptul de lângă punte, niciodată direct în Sheet:
-  1. „node team-voda.mjs ping” îți dă câmpurile permise (contacte, intAn, an, intCons, cons, intCons2, cons2, clSemn, ctrSemn, unSemn, clPlat, ctrPlat, unPlat, recCl, recCol, service). Dacă spune că intrarea nu e configurată, îi spui scurt lui Daniel că mai are de făcut pașii din Apps Script și te oprești.
-  2. Numele exact îl iei din „_ConfigEchipa”. Săptămâna: weekStart = sâmbăta ei, „aaaa-ll-zz”. Citești ce a raportat deja omul pe săptămâna aceea, ca să știi dacă e o completare sau o corectură.
-  3. Pui CONFIRMARE cu titlul scurt („Raportez pentru Stan Adrian: 3 analize, săptămâna 17.10–23.10”), un „tabel” cu câmpurile care se trimit (vechi → nou) și „teamvoda”: {"name": "<numele exact>", "weekStart": "aaaa-ll-zz", "values": {"an": 3}}, exact ce se trimite (pe telefon, tabelul arată aceste valori). Valorile din values sunt cele finale pe săptămână, nu doar diferența.
-  4. Doar după „Da”: „node team-voda.mjs raport '<JSON: name, weekStart, values, cid = id-ul cererii>'” (din folderul punții), o singură dată, cu exact name, weekStart și values din confirmare. Scriptul refuză orice altă valoare. Spui ce a răspuns aplicația; dacă a dat eroare, nu încerci altă cale.
-  5. Obiectivele (Teluri) și orice alt tab nu le scrii: îi spui că le setează el în aplicație.
+- Aplicația Team Vodă (raportări, corecturi, obiective, Management) o folosești doar prin scriptul de lângă punte, niciodată direct în Sheet. Poți face în ea orice ar face Daniel, dar orice scriere pleacă doar după „Da”, pe exact ce a văzut:
+  1. „node team-voda.mjs ping” îți dă câmpurile raportului, cheile Tel și funcțiile permise, cu semnăturile lor. Dacă spune că intrarea nu e configurată, îi spui scurt lui Daniel că mai are de pus cheia pe laptop și te oprești.
+  2. Numele exact îl iei din „_ConfigEchipa”. weekStart = sâmbăta săptămânii, „aaaa-ll-zz” (periodStart doar la săptămânile împărțite între două luni). Raportul se ADAUGĂ la ce are omul pe săptămână, deci în values pui doar ce se adaugă acum, nu totalul. Se acceptă doar săptămâna curentă și cea trecută.
+  3. Pentru o corectură sau o ștergere, întâi „node team-voda.mjs call '{"fn":"AR_myReports","args":["<nume>",""]}'” (doar citire, fără „Da”), ca să afli row și ts; apoi AR_correctReport sau AR_deleteReport; pentru rapoarte mai vechi, AR_mgStergeRaport("Voda", "", om, row, ts). La locul codului pui mereu "", iar ca nume de BL "Voda". Nu ceri și nu folosești codurile nimănui.
+  4. Pui CONFIRMARE cu un titlu scurt („Adaug pentru Stan Adrian 3 analize, săptămâna 17.10–23.10”) și „teamvoda” = exact ce pleacă: {"action": "raport", "payload": {"name": "...", "weekStart": "...", "values": {"an": 3}}}, sau {"action": "tel", "payload": {"weekStart": "...", "rows": [{"name": "...", "tel": {"an": 0, "cons": 0, "service": 0}}]}}, sau {"action": "call", "payload": {"fn": "...", "args": [...]}}. Tabelul de pe telefon îl face puntea din „teamvoda”.
+  5. Doar după „Da”, o singură dată, din folderul punții: „node team-voda.mjs <action> '<payload din confirmare, plus "cid": id-ul cererii>'”. Scriptul refuză orice diferă de confirmare. Spui ce a răspuns aplicația; la ok:false spui eroarea și nu încerci altă cale.
 Proiecte mari (o prezentare, un plan, un document, o ofertă, idei de proiect, o cercetare lungă):
 - Lucrezi cât e nevoie, fără să întrebi pe drum. Pentru părți independente (cercetare, scriere, verificare) poți porni subagenți (Task) și le aduni rezultatele.
 - Rezultatul complet îl pui într-un document Google nou (create_file, ca Google Doc; prezentările ca Google Slides dacă se poate, altfel ca document cu câte o secțiune pe slide), în folderul „Argus – proiecte” din Drive (îl creezi dacă lipsește). Nu partajezi documentul cu nimeni.
@@ -592,19 +592,57 @@ function table(value) {
   return rows.length > 1 ? rows : undefined;
 }
 
-// Raportarea Team Vodă din CONFIRMARE: nume, săptămână (sâmbăta) și cifre întregi, cum se trimit.
-function teamVodaPayload(value) {
-  if (!value || typeof value !== "object" || typeof value.name !== "string" || !value.name.trim()) return undefined;
-  const week = value.weekStart ?? value.periodStart;
-  if (typeof week !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return undefined;
-  if (!value.values || typeof value.values !== "object") return undefined;
-  const values = {};
-  for (const [key, number] of Object.entries(value.values)) {
-    if (!/^[A-Za-z0-9]{1,20}$/.test(key) || !Number.isInteger(Number(number))) return undefined;
-    values[key] = Number(number);
+// Ce trimite Team Vodă după „Da”, din CONFIRMARE: {action: raport | tel | call, payload}. Tabelul de pe telefon se face din el.
+function teamVodaRequest(value) {
+  if (!value || typeof value !== "object") return undefined;
+  // Forma veche: direct raportul.
+  const { action, payload } = value.action ? value : { action: "raport", payload: value };
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
+  if (JSON.stringify(payload).length > 4000) return undefined;
+  const date = (text) => typeof text === "string" && /^\d{4}-\d{2}-\d{2}$/.test(text);
+  if (action === "raport") {
+    if (typeof payload.name !== "string" || !payload.name.trim() || !date(payload.weekStart)) return undefined;
+    if (payload.periodStart !== undefined && !date(payload.periodStart)) return undefined;
+    if (!payload.values || typeof payload.values !== "object") return undefined;
+    const values = {};
+    for (const [key, number] of Object.entries(payload.values)) {
+      if (!/^[A-Za-z0-9]{1,20}$/.test(key) || !Number.isInteger(Number(number))) return undefined;
+      values[key] = Number(number);
+    }
+    if (!Object.keys(values).length) return undefined;
+    const clean = { name: payload.name.trim(), weekStart: payload.weekStart, values };
+    if (payload.periodStart) clean.periodStart = payload.periodStart;
+    return { action, payload: clean };
   }
-  if (!Object.keys(values).length) return undefined;
-  return { name: value.name.trim(), [value.weekStart ? "weekStart" : "periodStart"]: week, values };
+  if (action === "tel") {
+    if (!date(payload.weekStart) || !Array.isArray(payload.rows) || !payload.rows.length) return undefined;
+    return { action, payload: { weekStart: payload.weekStart, rows: payload.rows } };
+  }
+  if (action === "call") {
+    if (typeof payload.fn !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(payload.fn)) return undefined;
+    return { action, payload: { fn: payload.fn, args: Array.isArray(payload.args) ? payload.args : [] } };
+  }
+  return undefined;
+}
+
+function teamVodaTable({ action, payload }) {
+  const cell = (value) => (typeof value === "string" ? value : JSON.stringify(value) ?? "").slice(0, 80);
+  if (action === "raport") {
+    return [
+      ["Câmp", "Se adaugă"],
+      ["Nume", payload.name],
+      ["Săptămâna din", payload.weekStart],
+      ...(payload.periodStart ? [["Perioada din", payload.periodStart]] : []),
+      ...Object.entries(payload.values).map(([key, value]) => [key, String(value)]),
+    ];
+  }
+  if (action === "tel") {
+    return [
+      ["Obiective din " + payload.weekStart, "Analize", "Consultanțe", "Service"],
+      ...payload.rows.slice(0, 15).map((row) => [cell(row?.name), cell(row?.tel?.an), cell(row?.tel?.cons), cell(row?.tel?.service)]),
+    ];
+  }
+  return [["Funcție", payload.fn], ...payload.args.slice(0, 10).map((arg, index) => [`Argument ${index + 1}`, cell(arg)])];
 }
 
 // Rezultatul final nu are voie să se piardă dacă internetul sau serverul cade exact atunci: reîncercăm câteva minute.
@@ -654,8 +692,8 @@ async function handle(config, cerere) {
         ? { timeout: PROJECT_TIMEOUT_MS }
         : {};
   // Lacătul Team Vodă se deschide doar pentru raportarea exactă din confirmare (nume, săptămână, cifre).
-  const teamvoda = send ? teamVodaPayload(cerere.confirmare?.teamvoda) : undefined;
-  if (teamvoda) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000, payload: teamvoda }));
+  const teamvoda = send ? teamVodaRequest(cerere.confirmare?.teamvoda) : undefined;
+  if (teamvoda) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000, ...teamvoda }));
   let run;
   try {
     run = await runWarm(config, full, options);
@@ -682,7 +720,7 @@ async function handle(config, cerere) {
   }
   const { text, confirmare } = splitConfirmation(run.text);
   if (confirmare && !send) {
-    const teamvoda = teamVodaPayload(confirmare.teamvoda);
+    const teamvoda = teamVodaRequest(confirmare.teamvoda);
     await report(config, {
       id: cerere.id,
       status: "așteaptă confirmare",
@@ -694,14 +732,7 @@ async function handle(config, cerere) {
         text: String(confirmare.text || text.slice(0, 500)),
         destinatar: confirmare.destinatar ? String(confirmare.destinatar) : undefined,
         // La Team Vodă, tabelul îl face puntea din ce pleacă efectiv, ca Daniel să confirme exact cifrele trimise.
-        tabel: teamvoda
-          ? [
-              ["Câmp", "Se trimite"],
-              ["Nume", teamvoda.name],
-              ["Săptămâna din", teamvoda.weekStart ?? teamvoda.periodStart],
-              ...Object.entries(teamvoda.values).map(([key, value]) => [key, String(value)]),
-            ]
-          : table(confirmare.tabel),
+        tabel: teamvoda ? teamVodaTable(teamvoda) : table(confirmare.tabel),
         teamvoda,
       },
     });

@@ -22,3 +22,5 @@ Argus trimite raportările prin intrarea „Argus” din scriptul aplicației (d
 ```
 
 Verificare: `node team-voda.mjs ping` (din folderul punții) trebuie să răspundă cu `ok: true`. Cheia rămâne doar în config.json; nu o trimite pe chat.
+
+Acțiuni: `ping` (câmpuri și funcții permise), `raport` (se adaugă la săptămână), `tel` (obiective) și `call` (funcțiile din `ARGUS_FN`). Fără „Da” merg doar `ping` și citirea `AR_myReports`; orice scriere pleacă doar cu lacătul scris de punte după „Da”, pentru exact datele confirmate.

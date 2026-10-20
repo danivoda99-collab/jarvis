@@ -19,8 +19,8 @@ export type Cerere = {
     text: string;
     destinatar?: string;
     tabel?: string[][];
-    // O raportare Team Vodă: exact ce pleacă după „Da” (laptopul refuză orice altceva).
-    teamvoda?: { name: string; weekStart?: string; periodStart?: string; values: Record<string, number> };
+    // O scriere în Team Vodă: exact ce pleacă după „Da” (laptopul refuză orice altceva).
+    teamvoda?: { action: "raport" | "tel" | "call"; payload: Record<string, unknown> };
   };
   sesiune?: string;
   // Grafice, tabele, bare de progres trimise de laptop odată cu rezultatul.

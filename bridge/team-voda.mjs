@@ -1,16 +1,33 @@
-// Trimite o raportare în aplicația Team Vodă, prin intrarea „Argus” din scriptul ei (doPost).
+// Lucrează în aplicația Team Vodă prin intrarea „Argus” din scriptul ei (doPost).
 // Cheia și adresa stau doar în config.json („teamVoda”: {"url": "...", "secret": "..."}), nu ajung la model.
 // Folosire: node team-voda.mjs ping
 //           node team-voda.mjs raport '{"name":"…","weekStart":"2026-10-17","values":{"an":2},"cid":"…"}'
+//           node team-voda.mjs tel '{"weekStart":"2026-10-24","rows":[{"name":"…","tel":{"an":5,"cons":3,"service":1}}],"cid":"…"}'
+//           node team-voda.mjs call '{"fn":"AR_myReports","args":["…",""]}'
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// Funcțiile care doar citesc merg fără „Da”; orice altceva are nevoie de lacăt.
+const READ_FNS = new Set(["AR_myReports"]);
 
 function fail(message) {
   console.log(JSON.stringify({ ok: false, error: message }));
   process.exit(1);
+}
+
+// Aceeași formă indiferent de ordinea cheilor, ca să comparăm exact ce a confirmat Daniel.
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .filter((key) => value[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 let config = {};
@@ -23,21 +40,30 @@ const { url, secret } = config.teamVoda || {};
 if (!url || !secret) fail("Intrarea Team Vodă nu e configurată încă (lipsește „teamVoda” din config.json).");
 
 const action = process.argv[2];
-if (action !== "ping" && action !== "raport") fail("Acțiunea e „ping” sau „raport”.");
+if (!["ping", "raport", "tel", "call"].includes(action)) fail("Acțiunea e „ping”, „raport”, „tel” sau „call”.");
 let payload;
-if (action === "raport") {
+if (action !== "ping") {
   try {
     payload = JSON.parse(process.argv[3] || "");
   } catch {
-    fail("Raportarea trebuie dată ca JSON.");
+    fail("Datele trebuie date ca JSON.");
   }
-  if (!payload?.name || !(payload.weekStart || payload.periodStart) || typeof payload.values !== "object") {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) fail("Datele trebuie să fie un obiect JSON.");
+}
+if (action === "raport") {
+  if (!payload.name || !payload.weekStart || typeof payload.values !== "object") {
     fail("Raportarea are nevoie de name, weekStart (sâmbăta, aaaa-ll-zz) și values.");
   }
+  payload.name = String(payload.name).trim();
+  payload.values = Object.fromEntries(Object.entries(payload.values).map(([key, value]) => [key, Number(value)]));
+}
+if (action === "call" && (typeof payload.fn !== "string" || (payload.args !== undefined && !Array.isArray(payload.args)))) {
+  fail("„call” are nevoie de fn și args (listă).");
 }
 
-// Raportarea pleacă doar dacă puntea a deschis lacătul pentru exact această cerere, după „Da”; lacătul se folosește o dată.
-if (action === "raport") {
+const readOnly = action === "ping" || (action === "call" && READ_FNS.has(payload.fn));
+if (!readOnly) {
+  // Scrierile pleacă doar dacă puntea a deschis lacătul după „Da”, pentru exact această cerere și exact aceste date; lacătul se folosește o dată.
   const gateFile = join(HERE, "gate-teamvoda.json");
   let gate = null;
   try {
@@ -46,21 +72,16 @@ if (action === "raport") {
     gate = null;
   }
   if (!gate || gate.cid !== payload.cid || !(Date.now() < gate.until)) {
-    fail("Raportarea pleacă doar după „Da”-ul lui Daniel, pentru cererea confirmată (cid).");
+    fail("Scrierea pleacă doar după „Da”-ul lui Daniel, pentru cererea confirmată (cid).");
   }
-  // Pleacă doar exact ce a văzut și a confirmat Daniel: același nume, aceeași săptămână, aceleași cifre.
-  const confirmed = gate.payload;
-  const same = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b || {}).sort());
-  const values = Object.fromEntries(Object.entries(payload.values).map(([key, value]) => [key, Number(value)]));
-  if (
-    !confirmed ||
-    confirmed.name !== String(payload.name).trim() ||
-    confirmed.weekStart !== payload.weekStart ||
-    confirmed.periodStart !== payload.periodStart ||
-    !same(confirmed.values, values)
-  ) {
-    fail("Raportarea diferă de cea confirmată de Daniel (nume, săptămână sau cifre), deci nu pleacă.");
+  const { cid, ...data } = payload;
+  if (action === "call") data.args = data.args ?? [];
+  if (gate.action !== action || canonical(gate.payload) !== canonical(data)) {
+    fail("Datele diferă de cele confirmate de Daniel, deci nu pleacă.");
   }
+  // Doar raportul folosește cid (aplicația nu-l scrie de două ori); la celelalte nu se trimite.
+  if (action !== "raport") payload = data;
+  else payload = { ...data, cid };
   try {
     unlinkSync(gateFile);
   } catch {
