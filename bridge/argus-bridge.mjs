@@ -22,6 +22,9 @@ const POLL_MS = 8_000;
 const FAST_POLL_MS = 2_000;
 const FAST_FOR_MS = 5 * 60_000;
 const RUN_TIMEOUT_MS = 15 * 60_000;
+// Proiectele mari (prezentări, planuri, documente, cercetări) au voie să lucreze până la o oră.
+const PROJECT_TIMEOUT_MS = 60 * 60_000;
+const PROJECT = /prezentare|slide|plan de|planul|document|ofert|proiect|strategi|cercet|documentea|analiz[ăa] (?:de|a)|raport lunar/i;
 // Câte cereri lucrează deodată. Trimiterile (WhatsApp în Chrome) merg tot una câte una, ca să nu se încurce tabul.
 const PARALLEL = 3;
 
@@ -355,7 +358,8 @@ function runClaude(config, prompt, { resume, kind = "work", gate: unlock } = {})
       dropGate(gate);
       try {
         const data = JSON.parse(out.trim().split("\n").pop());
-        resolve({ ok: !data.is_error, text: String(data.result ?? ""), session: data.session_id });
+        const text = String(data.result ?? "");
+        resolve({ ok: !data.is_error && !hitLimit(text), text, session: data.session_id });
       } catch {
         const text = (err || out || "Claude Code s-a oprit fără răspuns.").slice(-2000);
         log("Claude Code a eșuat:", text);
@@ -407,7 +411,8 @@ function spawnLane(config, kind = "work") {
       if (event.type === "result" && lane.done) {
         const done = lane.done;
         lane.done = null;
-        done({ ok: !event.is_error, text: String(event.result ?? ""), session: event.session_id });
+        const text = String(event.result ?? "");
+        done({ ok: !event.is_error && !hitLimit(text), text, session: event.session_id });
       }
     }
   });
@@ -460,7 +465,7 @@ function trimLanes() {
 }
 
 // gate: ce deschide lacătul pe durata cererii ({mode: "send", text, destinatar} după „Da”, {mode: "prep"} la pregătire).
-async function runWarm(config, prompt, { kind = "work", resume, prep, gate } = {}) {
+async function runWarm(config, prompt, { kind = "work", resume, prep, gate, timeout = RUN_TIMEOUT_MS } = {}) {
   if (config.treaz === false) return runClaude(config, prompt, { kind, resume, gate });
   let lane;
   if (kind === "wa") {
@@ -484,7 +489,7 @@ async function runWarm(config, prompt, { kind = "work", resume, prep, gate } = {
       lane.done = null;
       resolve({ ok: false, text: "Cererea a durat prea mult și am oprit-o." });
       retireLane(lane);
-    }, RUN_TIMEOUT_MS);
+    }, timeout);
     lane.done = (value) => {
       clearTimeout(timer);
       resolve(value);
@@ -533,6 +538,15 @@ function splitVisual(text) {
 // Când s-a terminat limita Claude, treburile automate (urmăriri, pregătiri) stau o oră, ca să nu consume și să nu umple jurnalul.
 const LIMIT = /usage limit|limit reached|hit your limit|out of (extra )?usage|credit balance|quota/i;
 let limitUntil = 0;
+// La limită, Claude răspunde uneori „normal” (fără eroare) cu un mesaj scurt despre limită: îl tratăm ca eșec,
+// ca treburile automate să se oprească și să nu salveze mesajul drept rezultat.
+function hitLimit(text) {
+  const raw = String(text || "");
+  if (raw.length > 400 || !LIMIT.test(raw)) return false;
+  noteLimit(raw);
+  return true;
+}
+
 function noteLimit(text) {
   if (LIMIT.test(String(text || "")) && Date.now() > limitUntil) {
     limitUntil = Date.now() + 60 * 60_000;
@@ -621,7 +635,9 @@ async function handle(config, cerere) {
     ? { kind: "wa", resume: cerere.sesiune, gate: { mode: "send", text: cerere.confirmare?.text ?? "", destinatar: cerere.confirmare?.destinatar ?? "" } }
     : aboutWhatsApp && config.chrome !== false
       ? { kind: "wa" }
-      : {};
+      : PROJECT.test(`${cerere.cerere} ${cerere.titlu}`)
+        ? { timeout: PROJECT_TIMEOUT_MS }
+        : {};
   if (send) writeFileSync(TEAMVODA_GATE, JSON.stringify({ cid: cerere.id, until: Date.now() + 10 * 60_000 }));
   let run;
   try {
@@ -888,10 +904,15 @@ async function prepareMeetings(config) {
       config,
       `Acum e ${new Date().toISOString()}. Citește din Google Calendar evenimentele lui Daniel din următoarele 30 de ore. Păstrează doar întâlnirile cu alți oameni (au participanți, link de video sau sunt clar o întâlnire), nu reminderele și nu blocurile personale. Răspunde DOAR cu un JSON pe un rând: [{"id":"<id eveniment>","titlu":"<titlu>","inceput":"<ISO cu fus orar>"}], sau [] dacă nu e nimic.`,
     );
-    const match = (run.text || "").match(/\[[\s\S]*\]/);
+    // Lista e pe un singur rând; luăm ultimul rând care arată ca o listă JSON (fără text în jur).
+    const match = (run.text || "")
+      .split("\n")
+      .map((line) => line.trim().replace(/^```(?:json)?|```$/g, "").trim())
+      .filter((line) => line.startsWith("[") && line.endsWith("]"))
+      .slice(-1);
     // Dacă n-a mers (limită, Google deconectat), nu reîncercăm la fiecare minut: următoarea încercare peste 30 de minute.
     state.scanat = Date.now() - SCAN_EVERY_MS + 30 * 60_000;
-    if (run.ok && match) {
+    if (run.ok && match.length) {
       try {
         state.intalniri = JSON.parse(match[0]).filter((item) => item && item.id && item.inceput);
         state.scanat = Date.now();
