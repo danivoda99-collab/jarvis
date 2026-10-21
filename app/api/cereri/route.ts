@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { firstSentence, markOpen, notify } from "@/lib/push";
-import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, type Cerere, type Status } from "@/lib/cereri";
+import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, saveIfStatus, type Cerere, type Status } from "@/lib/cereri";
 import { cleanVizual } from "@/lib/vizual";
 import { deliverLines } from "@/lib/ajutor";
 
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     rezultat?: string;
     vizual?: unknown;
   };
-  const text = (body.cerere ?? "").trim().slice(0, 4000);
+  const text = String(body.cerere ?? "").trim().slice(0, 4000);
   if (!text) return NextResponse.json({ error: "Lipsește cererea." }, { status: 400 });
   const confirmed = body.confirmat?.text
     ? {
@@ -110,7 +110,9 @@ export async function PATCH(request: Request) {
     // Treburile din monitorizare îl anunță pe Daniel doar când îl privesc („DANIEL: …”); restul rămân în „Lucrări”.
     const forDaniel = updated.status === "gata" && /^\s*DANIEL:/.test(updated.rezultat ?? "");
     if (forDaniel) updated.rezultat = (updated.rezultat ?? "").replace(/^\s*DANIEL:\s*/, "");
-    await saveCerere(updated);
+    if (!(await saveIfStatus(updated, current.status))) {
+      return NextResponse.json({ error: "Cererea s-a schimbat între timp." }, { status: 409 });
+    }
     // Răspunsurile pentru oamenii de pe pagina de ajutor și ce învață asistentul.
     if (updated.status === "gata" && updated.rezultat) await deliverLines(updated.rezultat).catch(() => undefined);
     if (updated.status === "gata" && (!updated.liniste || forDaniel)) await notify(updated.titlu, firstSentence(updated.rezultat), updated.id);

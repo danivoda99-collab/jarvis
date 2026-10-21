@@ -34,7 +34,8 @@ export type Cerere = {
 const LIST = "argus:cereri";
 // Crește la fiecare schimbare, ca laptopul să verifice des cu o singură comandă și să citească lista doar când e ceva nou.
 const SIGNAL = "argus:semnal";
-const KEEP = 50;
+// Destul de lung ca biletele de pe pagina de ajutor să nu împingă afară cererile lui Daniel încă nefăcute.
+const KEEP = 120;
 
 function redis() {
   const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -84,6 +85,27 @@ export async function saveCerere(cerere: Cerere) {
   // 30 de zile e destul ca istoric; coada nu crește la nesfârșit.
   await command("SET", key(cerere.id), JSON.stringify(cerere), "EX", 60 * 60 * 24 * 30);
   await command("INCR", SIGNAL);
+}
+
+// Scrie cererea doar dacă e încă în starea citită înainte, într-un singur pas în Redis:
+// două „Da” apăsate deodată (sau pe două telefoane) nu pot porni laptopul de două ori.
+const SAVE_IF = `local v = redis.call('GET', KEYS[1])
+if not v then return 0 end
+if cjson.decode(v).status ~= ARGV[1] then return 0 end
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+redis.call('INCR', KEYS[2])
+return 1`;
+
+export async function saveIfStatus(cerere: Cerere, expected: Status): Promise<boolean> {
+  let result: number;
+  try {
+    result = await command<number>("EVAL", SAVE_IF, 2, key(cerere.id), SIGNAL, expected, JSON.stringify(cerere), 60 * 60 * 24 * 30);
+  } catch {
+    // Dacă Redis nu poate rula scriptul, scriem ca înainte, ca nimic să nu se blocheze.
+    await saveCerere(cerere);
+    return true;
+  }
+  return result === 1;
 }
 
 export async function readSignal(): Promise<string> {

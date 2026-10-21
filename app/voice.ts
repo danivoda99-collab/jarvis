@@ -208,16 +208,19 @@ export function primeSpeech() {
 let finishCurrent: (() => void) | null = null;
 let wakeStream: (() => void) | null = null;
 let speakGeneration = 0;
-let source: AudioBufferSourceNode | null = null;
+// Bucățile de sunet programate să cânte; le oprim toate când Daniel întrerupe.
+const playing = new Set<AudioBufferSourceNode>();
 
 export function stopSpeaking() {
   speakGeneration += 1;
-  try {
-    source?.stop();
-  } catch {
-    // sunetul se terminase deja
+  for (const node of playing) {
+    try {
+      node.stop();
+    } catch {
+      // sunetul se terminase deja
+    }
   }
-  source = null;
+  playing.clear();
   window.speechSynthesis?.cancel();
   // Unele browsere nu anunță sfârșitul frazelor anulate; închidem noi promisiunea.
   finishCurrent?.();
@@ -233,7 +236,7 @@ export function speakStream(): { push: (sentence: string) => void; finish: () =>
   }
   stopSpeaking();
   const generation = speakGeneration;
-  const queue: Promise<ArrayBuffer>[] = [];
+  const queue: { text: string; response: Promise<Response> }[] = [];
   let ended = false;
   const wake = () => {
     const resume = wakeStream;
@@ -250,9 +253,10 @@ export function speakStream(): { push: (sentence: string) => void; finish: () =>
         continue;
       }
       try {
-        await play(ctx, await ctx.decodeAudioData(await queue[index]), generation);
+        await playStream(ctx, await queue[index].response, generation);
       } catch {
-        // o bucată n-a venit de la OpenAI: trecem la următoarea
+        // o bucată n-a venit de la OpenAI: o citește vocea telefonului, ca Argus să nu rămână mut
+        if (generation === speakGeneration) await browserSpeak(queue[index].text);
       }
       index += 1;
     }
@@ -260,9 +264,9 @@ export function speakStream(): { push: (sentence: string) => void; finish: () =>
   return {
     push(sentence) {
       if (!sentence.trim() || generation !== speakGeneration) return;
-      const pending = fetchSpeech(sentence.trim());
-      pending.catch(() => {});
-      queue.push(pending);
+      const response = requestSpeech(sentence.trim());
+      response.catch(() => {});
+      queue.push({ text: sentence.trim(), response });
       wake();
     },
     finish() {
@@ -292,30 +296,135 @@ function chunks(text: string): string[] {
   return result;
 }
 
-async function fetchSpeech(text: string): Promise<ArrayBuffer> {
+// Sunetul vine ca PCM brut (24 kHz, 16 biți, mono), ca să-l putem cânta pe măsură ce sosește.
+const PCM_RATE = 24_000;
+
+async function requestSpeech(text: string): Promise<Response> {
   const response = await fetch("/api/vorbeste", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voce: chosenVoiceName() || cloudDefault, limba: spokenLanguage() }),
+    body: JSON.stringify({ text, voce: chosenVoiceName() || cloudDefault, limba: spokenLanguage(), format: "pcm" }),
   });
-  if (!response.ok) throw new Error(String(response.status));
-  return response.arrayBuffer();
+  if (!response.ok || !response.body) throw new Error(String(response.status));
+  return response;
 }
 
-function play(ctx: AudioContext, buffer: AudioBuffer, generation: number): Promise<void> {
+function pcmToFloat(bytes: Uint8Array): Float32Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length - (bytes.length % 2));
+  const samples = new Float32Array(view.byteLength / 2);
+  for (let index = 0; index < samples.length; index += 1) samples[index] = view.getInt16(index * 2, true) / 32768;
+  return samples;
+}
+
+// Frazele fixe (salutul) rămân în memorie după ce le aducem o dată, ca să pornească pe loc.
+const phrases = new Map<string, Float32Array>();
+
+function phraseKey(text: string) {
+  return `${chosenVoiceName() || cloudDefault}|${spokenLanguage()}|${text.trim()}`;
+}
+
+export function preloadPhrase(text: string) {
+  const key = phraseKey(text);
+  if (!cloud || phrases.has(key)) return;
+  requestSpeech(text.trim())
+    .then((response) => response.arrayBuffer())
+    .then((buffer) => {
+      if (buffer.byteLength > 0) phrases.set(key, pcmToFloat(new Uint8Array(buffer)));
+    })
+    .catch(() => {});
+}
+
+function playSamples(ctx: AudioContext, samples: Float32Array, generation: number): Promise<void> {
   return new Promise((resolve) => {
-    if (generation !== speakGeneration) return resolve();
+    if (generation !== speakGeneration || !samples.length) return resolve();
+    const buffer = ctx.createBuffer(1, samples.length, PCM_RATE);
+    buffer.getChannelData(0).set(samples);
     const node = ctx.createBufferSource();
     node.buffer = buffer;
     node.connect(ctx.destination);
-    source = node;
+    playing.add(node);
     const done = () => {
       if (finishCurrent === done) finishCurrent = null;
+      playing.delete(node);
       resolve();
     };
     finishCurrent = done;
     node.onended = done;
     node.start();
+  });
+}
+
+// Cântă o frază cât încă se descarcă: primele ~0,1 secunde pornesc imediat, restul se leagă în continuare.
+// Se termină când a cântat tot; aruncă eroare doar dacă n-a venit nimic de cântat.
+async function playStream(ctx: AudioContext, response: Response, generation: number): Promise<void> {
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  let carry: number | null = null; // un octet rămas din bucata trecută
+  let pending: Float32Array[] = [];
+  let pendingLength = 0;
+  let playhead = 0;
+  let last: AudioBufferSourceNode | null = null;
+
+  const flush = () => {
+    if (!pendingLength || generation !== speakGeneration) return;
+    const buffer = ctx.createBuffer(1, pendingLength, PCM_RATE);
+    const channel = buffer.getChannelData(0);
+    let offset = 0;
+    for (const piece of pending) {
+      channel.set(piece, offset);
+      offset += piece.length;
+    }
+    pending = [];
+    pendingLength = 0;
+    const node = ctx.createBufferSource();
+    node.buffer = buffer;
+    node.connect(ctx.destination);
+    const start = Math.max(playhead, ctx.currentTime + 0.03);
+    node.start(start);
+    playhead = start + buffer.duration;
+    playing.add(node);
+    node.onended = () => playing.delete(node);
+    last = node;
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (generation !== speakGeneration) {
+      reader.cancel().catch(() => {});
+      return;
+    }
+    if (done) break;
+    if (!value?.length) continue;
+    let bytes = value;
+    if (carry !== null) {
+      const joined = new Uint8Array(bytes.length + 1);
+      joined[0] = carry;
+      joined.set(bytes, 1);
+      bytes = joined;
+      carry = null;
+    }
+    if (bytes.length % 2) carry = bytes[bytes.length - 1];
+    const samples = pcmToFloat(bytes);
+    pending.push(samples);
+    pendingLength += samples.length;
+    // Când e aproape să rămână fără sunet, pornim bucăți mici; altfel le adunăm câte o jumătate de secundă.
+    const ahead = playhead - ctx.currentTime;
+    if (pendingLength >= PCM_RATE * (ahead < 0.25 ? 0.1 : 0.5)) flush();
+  }
+  flush();
+  const tail = last as AudioBufferSourceNode | null;
+  if (!tail) {
+    if (generation === speakGeneration) throw new Error("fără sunet");
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    if (!playing.has(tail)) return resolve();
+    const done = () => {
+      if (finishCurrent === done) finishCurrent = null;
+      playing.delete(tail);
+      resolve();
+    };
+    finishCurrent = done;
+    tail.onended = done;
   });
 }
 
@@ -325,20 +434,20 @@ async function cloudSpeak(text: string): Promise<void> {
   const ctx = audio();
   if (!ctx) return browserSpeak(text);
   if (ctx.state !== "running") await ctx.resume().catch(() => {});
+  const known = phrases.get(phraseKey(text));
+  if (known) return playSamples(ctx, known, generation);
   const parts = chunks(text);
-  const pending = parts.map((part) => fetchSpeech(part));
+  const pending = parts.map((part) => requestSpeech(part));
   pending.forEach((promise) => promise.catch(() => {}));
   for (let index = 0; index < parts.length; index += 1) {
     if (generation !== speakGeneration) return;
-    let buffer: AudioBuffer;
     try {
-      buffer = await ctx.decodeAudioData(await pending[index]);
+      await playStream(ctx, await pending[index], generation);
     } catch {
       // OpenAI nu răspunde: restul îl citește vocea din browser, ca să nu rămână mut.
       if (generation !== speakGeneration) return;
       return browserSpeak(parts.slice(index).join(" "));
     }
-    await play(ctx, buffer, generation);
   }
 }
 

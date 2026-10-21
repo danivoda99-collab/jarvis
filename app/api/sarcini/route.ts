@@ -69,7 +69,12 @@ export async function PATCH(request: Request) {
   if (body.titlu) changes.title = body.titlu;
   if (body.notite !== undefined) changes.notes = body.notite;
   if (body.scadenta) changes.due = `${body.scadenta.slice(0, 10)}T00:00:00.000Z`;
-  if (Object.keys(changes).length === 0) changes.status = "completed";
+  // Doar cererea fără niciun câmp de schimbat bifează sarcina; un câmp gol nu o termină din greșeală.
+  const asked = body.titlu !== undefined || body.notite !== undefined || body.scadenta !== undefined;
+  if (Object.keys(changes).length === 0) {
+    if (asked) return NextResponse.json({ error: "Nu am primit nimic de schimbat." }, { status: 400 });
+    changes.status = "completed";
+  }
   try {
     await google(`${TASKS}/${encodeURIComponent(body.id)}`, {
       method: "PATCH",

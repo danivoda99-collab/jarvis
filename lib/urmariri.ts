@@ -55,7 +55,10 @@ export async function updateUrmarire(id: string, change: Partial<Pick<Urmarire, 
   const all = await listUrmariri();
   const item = all.find((entry) => entry.id === id);
   if (!item) return null;
-  Object.assign(item, change);
+  // Doar câmpurile trimise: o verificare fără „stare” nu trebuie să oprească urmărirea.
+  for (const [field, value] of Object.entries(change)) {
+    if (value !== undefined) Object.assign(item, { [field]: value });
+  }
   await save(all);
   return item;
 }

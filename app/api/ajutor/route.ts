@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Ajutorul nu e pornit încă." }, { status: 500 });
     if (!(await allowed(ip, 30))) return NextResponse.json({ error: "Prea multe întrebări într-o oră. Încearcă puțin mai târziu." }, { status: 429 });
-    const history = Array.isArray(body.istoric) ? body.istoric.filter((item) => item && typeof item.text === "string") : [];
+    const history = Array.isArray(body.istoric) ? body.istoric.filter((item) => item && typeof item.text === "string" && item.text.trim()) : [];
     return NextResponse.json({ ok: true, raspuns: await answer(question, history) });
   } catch (caught) {
     const message = caught instanceof QueueError ? "Ajutorul nu răspunde acum." : "N-am putut răspunde acum. Încearcă din nou.";

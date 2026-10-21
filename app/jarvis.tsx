@@ -18,6 +18,7 @@ import {
   isUserTalking,
   listenOnce,
   openMic,
+  preloadPhrase,
   primeSpeech,
   setCloudVoice,
   speak,
@@ -48,6 +49,7 @@ const GREETING = {
   spoken: "Hello Daniel, Argus online. What are we breaking today?",
   ro: "Salut, Daniel! Argus e aici. Cu ce rupem topurile azi?",
 };
+const greetingFor = (language: Language) => (language === "ro" ? GREETING.ro : GREETING.spoken);
 const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
 
@@ -250,6 +252,19 @@ function asModule(value: unknown): Module | undefined {
   return (["agenda", "sarcini", "buget", "gmail"] as const).find((module) => module === text);
 }
 
+// Trimite eroarea la server o singură dată pe minut pentru același text, ca o buclă să nu umple coada.
+const reported = new Map<string, number>();
+function reportError(message: string, where: string) {
+  const now = Date.now();
+  if ((reported.get(message) ?? 0) > now - 60_000) return;
+  reported.set(message, now);
+  void fetch("/api/eroare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mesaj: message.slice(0, 400), unde: where, aparat: navigator.userAgent.slice(0, 120) }),
+  }).catch(() => {});
+}
+
 function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boolean; spotifyConnected: boolean }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -266,6 +281,25 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const logRef = useRef<HTMLDivElement>(null);
   const now = useClock();
   const [googleNotice, setGoogleNotice] = useState("");
+
+  // Orice eroare văzută aici ajunge și la Argus de pe laptop, care o verifică singur și îl anunță pe Daniel doar dacă e nevoie de el.
+  useEffect(() => {
+    if (error) reportError(error, "conversație");
+  }, [error]);
+  useEffect(() => {
+    // „Script error.” vine din scripturi străine fără detalii; nu ajută pe nimeni.
+    const onError = (event: ErrorEvent) => {
+      if (event.message && !/^script error\.?$/i.test(event.message)) reportError(event.message, "cod");
+    };
+    const onRejection = (event: PromiseRejectionEvent) =>
+      reportError(event.reason instanceof Error ? event.reason.message : String(event.reason ?? "promisiune respinsă"), "cod");
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
 
   // Mesajul de după conectarea la Google (?google=conectat).
   useEffect(() => {
@@ -994,6 +1028,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         setVoices(data.voci);
         setVoiceName(data.voci.includes(saved) ? saved : fallback);
         setCanListenNow(canListen());
+        preloadPhrase(greetingFor(spokenLanguage()));
       })
       .catch(() => {})
       .finally(voiceCheckDone);
@@ -1307,11 +1342,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         })
         .catch(() => {});
     }
-    historyRef.current = await fetchMemory();
-    cleanRef.current = true;
+    // Memoria vine cât Argus salută, nu înainte.
+    const memory = fetchMemory();
     quietRef.current = 0;
     log("agent", GREETING.ro);
-    await say(spokenLanguage() === "ro" ? GREETING.ro : GREETING.spoken);
+    await say(greetingFor(spokenLanguage()));
+    historyRef.current = await memory;
+    cleanRef.current = true;
     if (activeRef.current) {
       setPhase("listening");
       listen();
@@ -1468,6 +1505,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     setVoiceName(name);
     primeSpeech();
     void speak(VOICE_CHECK[spokenLanguage()]);
+    preloadPhrase(greetingFor(spokenLanguage()));
   }
 
   const activeProjects = projects.filter((item) => ["nouă", "în lucru", "confirmată", "așteaptă confirmare"].includes(item.status)).length;
@@ -1498,6 +1536,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     setLanguage(next);
     primeSpeech();
     void speak(VOICE_CHECK[next]);
+    preloadPhrase(greetingFor(next));
   }
 
   // Pe desktop, Space pornește și oprește conversația.
