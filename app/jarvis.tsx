@@ -13,7 +13,10 @@ import {
   canListen,
   chooseVoice,
   chosenVoiceName,
+  chooseFastHearing,
   closeMic,
+  fastHearing,
+  fastHearingStatus,
   englishVoices,
   isUserTalking,
   listenOnce,
@@ -281,6 +284,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const logRef = useRef<HTMLDivElement>(null);
   const now = useClock();
   const [googleNotice, setGoogleNotice] = useState("");
+
+  // Auzul instant: starea se citește din telefon și se reîmprospătează, ca Daniel să vadă dacă merge.
+  useEffect(() => {
+    setFastOn(fastHearing());
+    const timer = setInterval(() => setFastStatus(fastHearingStatus()), 3000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Orice eroare văzută aici ajunge și la Argus de pe laptop, care o verifică singur și îl anunță pe Daniel doar dacă e nevoie de el.
   useEffect(() => {
@@ -956,6 +966,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   }
   const [projects, setProjects] = useState<Cerere[]>([]);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [fastOn, setFastOn] = useState(false);
+  const [fastStatus, setFastStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
   // Notificările: „off” = se pot porni, „on” = pornite, „denied” = refuzate, „none” = telefonul nu le suportă aici
   // (pe iPhone merg doar din aplicația pusă pe ecranul principal).
@@ -1637,6 +1649,27 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
               </select>
             </dd>
           </div>
+          {canListenNow && (
+            <div>
+              <dt>Auz instant</dt>
+              <dd>
+                <button
+                  type="button"
+                  className="voice"
+                  onClick={() => {
+                    chooseFastHearing(!fastOn);
+                    setFastOn(!fastOn);
+                    setFastStatus(fastHearingStatus());
+                  }}
+                  aria-pressed={fastOn}
+                  title="În test: Argus te aude în timp real, deci răspunde mai repede"
+                >
+                  {fastOn ? "Pornit (test)" : "Oprit"}
+                </button>
+                {fastOn && fastStatus && <span className="module-state"> {fastStatus}</span>}
+              </dd>
+            </div>
+          )}
           <div>
             <dt>Voce</dt>
             <dd>
