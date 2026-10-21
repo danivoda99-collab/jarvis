@@ -598,6 +598,15 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
           });
     },
+    nu_deranja: async (parameters: { minute?: unknown }) => {
+      const raw = await callApi("/api/nu-deranja", "POST", { minute: Number(parameters.minute) || 0 });
+      if (raw.startsWith("Eroare")) return raw;
+      const data = JSON.parse(raw) as { pana?: string | null; amanate?: { titlu: string; text: string }[] };
+      if (data.pana) return `Liniște până la ${timeOf(new Date(data.pana))}. Spune doar, scurt, până la ce oră.`;
+      return data.amanate?.length
+        ? `Liniștea s-a oprit. Au venit între timp: ${data.amanate.map((item) => `${item.titlu}: ${item.text}`).join(" | ")}. Spune-le pe scurt.`
+        : "Liniștea s-a oprit și n-a venit nimic între timp.";
+    },
     // Imaginea se face pe server (OpenAI) și apare direct într-o fereastră; pe iPhone se salvează ținând apăsat pe ea.
     imagine_creeaza: async (parameters: { descriere?: unknown; format?: unknown; titlu?: unknown }) => {
       const raw = await callApi("/api/imagine", "POST", { descriere: asText(parameters.descriere), format: asText(parameters.format) || undefined });
@@ -1361,6 +1370,26 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     await say(greetingFor(spokenLanguage()));
     historyRef.current = await memory;
     cleanRef.current = true;
+    // Ce a venit cât a fost „nu mă deranja”: se arată și se spune o singură dată, după salut.
+    void fetch("/api/nu-deranja", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { amanate?: { titlu: string; text: string }[] } | null) => {
+        const held = data?.amanate ?? [];
+        if (!held.length) return;
+        addCard({
+          id: crypto.randomUUID(),
+          kind: "summary",
+          title: "Cât ai avut liniște",
+          text: held.map((item) => `${item.titlu}: ${item.text}`).join("\n"),
+        });
+        const titles = held.slice(0, 3).map((item) => item.titlu).join("; ");
+        void report(
+          spokenLanguage() === "ro"
+            ? `Cât ai avut liniște au venit ${held.length === 1 ? "un lucru" : `${held.length} lucruri`}: ${titles}.`
+            : `While you were on do not disturb, ${held.length} things came in: ${titles}.`,
+        );
+      })
+      .catch(() => {});
     if (activeRef.current) {
       setPhase("listening");
       listen();

@@ -32,13 +32,43 @@ export async function unsubscribe(endpoint: string) {
   }
 }
 
+// „Nu mă deranja”: cât există cheia, notificările obișnuite se țin deoparte și le spune Argus la final.
+const QUIET = "argus:nu-deranja";
+const HELD = "argus:amanate";
+
+export async function quietUntil(): Promise<string | null> {
+  return command<string | null>("GET", QUIET);
+}
+
+export async function setQuiet(minutes: number): Promise<string | null> {
+  if (minutes <= 0) {
+    await command("DEL", QUIET);
+    return null;
+  }
+  const until = new Date(Date.now() + minutes * 60_000).toISOString();
+  await command("SET", QUIET, until, "EX", Math.round(minutes * 60));
+  return until;
+}
+
+// Ce a venit cât a fost liniște; citirea le și golește, ca să fie spuse o singură dată.
+export async function takeHeld(): Promise<{ titlu: string; text: string }[]> {
+  const items = await command<string[]>("LRANGE", HELD, 0, 19);
+  if (items.length) await command("DEL", HELD);
+  return items.map((item) => JSON.parse(item) as { titlu: string; text: string }).reverse();
+}
+
 export async function markOpen() {
   await command("SET", OPEN, "1", "EX", 30);
 }
 
 // Nu aruncă niciodată: o notificare ratată nu trebuie să strice cererea.
-export async function notify(title: string, body: string, tag?: string) {
+export async function notify(title: string, body: string, tag?: string, urgent = false) {
   try {
+    if (!urgent && (await command<string | null>("GET", QUIET))) {
+      await command("LPUSH", HELD, JSON.stringify({ titlu: title.slice(0, 120), text: body.slice(0, 240) }));
+      await command("LTRIM", HELD, 0, 19);
+      return;
+    }
     if (await command<string | null>("GET", OPEN)) return;
     const all = await command<string[]>("SMEMBERS", SUBSCRIPTIONS);
     if (!all.length) return;

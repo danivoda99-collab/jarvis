@@ -525,6 +525,18 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
     },
   },
   {
+    name: "nu_deranja",
+    description:
+      "„Nu mă deranja o oră”, „sunt în întâlnire până la 3”, „liniște până diseară”: notificările de pe telefon așteaptă până se termină (alertele urgente din echipă trec oricum). La final îi spui ce a venit între timp. „Gata, poți să mă anunți” = minute 0. Fără confirmare.",
+    input_schema: {
+      type: "object",
+      properties: {
+        minute: { type: "number", description: "Câte minute de liniște, de acum (cel mult 720); 0 oprește liniștea. Pentru „până la 15:00” calculezi tu din ora de acum." },
+      },
+      required: ["minute"],
+    },
+  },
+  {
     name: "imagine_creeaza",
     description:
       "Face o imagine nouă după o descriere (afiș, postare, invitație, ilustrație, logo, idee vizuală) și o arată pe ecran. Descrierea o scrii tu, detaliată, în engleză (subiect, stil, culori, compoziție, text exact dacă trebuie scris ceva pe ea). Pentru echipa Voda, stilul implicit: negru, portocaliu și auriu. Costă câțiva cenți: o faci doar când Daniel cere o imagine.",

@@ -172,5 +172,5 @@ export async function tellArgus(title: string, details: string) {
 export async function tellDaniel(title: string, text: string, request: string) {
   const cerere = await addCerere(title, request, undefined, "în lucru");
   await saveCerere({ ...cerere, status: "gata", rezultat: text, actualizat: new Date().toISOString() });
-  await notify(title, text.split("\n")[0] ?? text, cerere.id);
+  await notify(title, text.split("\n")[0] ?? text, cerere.id, true);
 }
