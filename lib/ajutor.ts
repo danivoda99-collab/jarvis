@@ -25,7 +25,7 @@ Săptămâna și termenele
 
 Câmpurile raportului (se numără ce s-a întâmplat în intervalul afișat)
 - Contacte: câți oameni ai sunat, chiar dacă n-ai stabilit întâlnire.
-- Int. Analiză (intenții de analiză): analizele programate, trecute în săptămâna în care are loc întâlnirea. De exemplu, marți stabilești o analiză pentru săptămâna viitoare: o treci la săptămâna viitoare.
+- Int. Analiză (intenții de analiză): analizele programate, trecute în săptămâna în care are loc întâlnirea. De exemplu, dacă într-o marți stabilești o analiză pentru săptămâna viitoare, o treci la săptămâna viitoare (exemplul nu spune ce zi e azi).
 - Analiză: câte analize ai ținut efectiv în interval, chiar dacă omul n-a semnat nimic.
 - Int. Cons (intenții de consultanță): câte consultanțe ai stabilit.
 - Consultanțe: câte consultanțe ai ținut în interval.

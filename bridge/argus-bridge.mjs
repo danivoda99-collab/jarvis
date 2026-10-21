@@ -941,7 +941,7 @@ async function checkAlerts(config) {
       `Acum e ${now}. Verificare automată pentru alerte; Daniel nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
       "Verifici, repede:",
       "1. Gmail: mailurile necitite din ultimele 3 ore. Important = un om real îi cere ceva lui Daniel, un termen azi sau mâine, ceva de la OVB sau de la echipă. Reclamele, newsletterele și notificările automate nu contează. Un mail de la un client OVB îl spui doar ca „mail de la un client”, fără nume sau detalii.",
-      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”): cine n-a raportat nici în ultimele 2 zile lucrătoare (cheie echipa:2zile-<prenume>). Cine n-a raportat azi intră în rezumatul de seară al echipei, nu aici.",
+      "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”). Raportarea e SĂPTĂMÂNALĂ: săptămâna e sâmbătă–vineri, raportul pentru ea se trimite până sâmbăta următoare la 17:00 (toleranță până la 18, cel mult 19), iar în timpul săptămânii se pot trimite rapoarte care se adună. Deci nu alertezi pentru zile fără raport. Doar vineri după 18:00 și sâmbătă până la 17:00: cine n-a trimis încă nimic pentru săptămâna care se încheie vineri (cheie echipa:sapt-<prenume>). Sâmbătă după 19:00: cine a ratat termenul (cheie echipa:ratat-<prenume>). În restul timpului, la punctul ăsta nu e nimic.",
       "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget (cheie buget:<categorie>, fără procent în cheie).",
       `Ce a fost deja anunțat (nu repeta): ${state.trimise.filter((item) => alreadySent(item, now.slice(0, 10))).map((item) => item.cheie).join(", ") || "nimic"}.`,
       "Respecți ce scrie în memorie.md despre alerte (de exemplu ce nu vrea Daniel să primească).",
@@ -1018,7 +1018,7 @@ async function weeklyReport(config) {
   log("Raportul de luni a plecat pe telefon.");
 }
 
-// ——— Agentul de echipă: în zilele lucrătoare, seara, laptopul vede cine e în urmă sau n-a raportat
+// ——— Agentul de echipă: în zilele lucrătoare, seara, laptopul vede cine e în urmă față de Tel sau merită o laudă
 // și îi propune lui Daniel câte un mesaj pentru fiecare; pe telefon, sub fiecare om, „Trimite pe WhatsApp” (după „Da”). ———
 const COACH_FILE = join(HERE, "echipa-seara.json");
 
@@ -1046,9 +1046,9 @@ async function teamCoach(config) {
     [
       `Azi e ${today.date}, seara. Rezumat automat al echipei; Daniel nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
       "Datele: dacă „node team-voda.mjs ping” (din folderul punții) răspunde ok, citești din aplicația Team Vodă cu „node team-voda.mjs call '{\"fn\":\"AR_mgLista\",\"args\":[\"Voda\",\"\"]}'” (lista echipei din Management, cu starea fiecăruia); altfel din centralizator, doar Raportari, Teluri și _ConfigEchipa, niciodată Inchideri sau Service. Săptămâna echipei e sâmbătă–vineri.",
-      "Vrei: cine n-a raportat azi, cine e mult sub obiectivul săptămânii (Tel) față de cât a trecut din săptămână, și cine a făcut ceva foarte bun azi (merită o vorbă bună). Cel mult 5 oameni, cei mai importanți întâi.",
-      "Pentru fiecare, un mesaj scurt de la Daniel, pe WhatsApp, cald și direct, pe tonul lui (vezi memorie.md), fără reproșuri, cu o întrebare sau un pas concret (de exemplu „Salut Cornel! N-am văzut raportul de azi. Ai avut întâlniri? Trece-le până diseară, să te văd în top.”). Fără cifre de clienți și fără date despre clienți. Numele din „catre” e exact numele din WhatsApp, din contacte.md; dacă nu-l găsești acolo, scrii numele din echipă.",
-      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Azi n-au raportat Cornel și Ana; Mihai e la jumătate din obiectiv; Ioana a făcut 3 analize.”). Apoi rândul VIZUAL cu „puncte”: titlu = numele, text = situația lui într-o frază scurtă, nivel = urgent (n-a raportat), important (în urmă) sau info (laudă), mesaj = {\"catre\": \"<nume WhatsApp>\", \"text\": \"<mesajul>\"}. După rândul VIZUAL nu mai scrii nimic. Dacă toți au raportat și sunt pe drumul bun, primul rând spune asta, iar punctele sunt cel mult 2 laude.",
+      "Raportarea e săptămânală (până sâmbătă la 17:00, cu rapoarte care se adună în timpul săptămânii), deci „n-a raportat azi” NU e o problemă și nu o spui. Vrei: cine e mult sub obiectivul săptămânii (Tel) față de cât a trecut din săptămână, după ce a raportat până acum, și cine a făcut ceva foarte bun (merită o vorbă bună). Vineri seara poți adăuga cine n-a trimis încă nimic săptămâna asta, ca reamintire blândă pentru sâmbătă. Cel mult 5 oameni, cei mai importanți întâi.",
+      "Pentru fiecare, un mesaj scurt de la Daniel, pe WhatsApp, cald și direct, pe tonul lui (vezi memorie.md), fără reproșuri, cu o întrebare sau un pas concret (de exemplu „Salut Cornel! Cum merge săptămâna? Mai ai 3 analize până la Tel; pe cine suni mâine?”). Fără cifre de clienți și fără date despre clienți. Numele din „catre” e exact numele din WhatsApp, din contacte.md; dacă nu-l găsești acolo, scrii numele din echipă.",
+      "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Mihai e la jumătate din Tel; Ioana a făcut deja 3 analize; restul sunt pe drum.”). Apoi rândul VIZUAL cu „puncte”: titlu = numele, text = situația lui într-o frază scurtă, nivel = urgent (mult în urmă față de Tel), important (puțin în urmă) sau info (laudă), mesaj = {\"catre\": \"<nume WhatsApp>\", \"text\": \"<mesajul>\"}. După rândul VIZUAL nu mai scrii nimic. Dacă toți sunt pe drumul bun, primul rând spune asta, iar punctele sunt cel mult 2 laude.",
     ].join("\n\n"),
   );
   if (!run.ok) {
