@@ -142,6 +142,10 @@ function journal(sursa: string, cerere: string, rezultat: string) {
 const MAX_STEPS = 8; // câte runde de unelte poate face Argus pentru o singură cerere
 const QUIET_ROUNDS = 3; // după atâtea ascultări fără nimic spus, Argus se oprește
 const DRIVING_QUIET_ROUNDS = 15; // în mașină ascultă mai mult (cam două minute) înainte să se oprească
+// În mașină, cu „Argus” ca cuvânt de trezire: după ascultarea obișnuită, așteaptă să fie strigat (cel mult o oră).
+const WAKE_KEY = "argus-trezire";
+const STANDBY_MS = 60 * 60_000;
+const WAKE_WORD = /^\W*(?:hei|hey|bun[ăa])?\W*argus\b[\s,.!?:;-]*/i;
 
 const PROJECT_STATE: Record<Cerere["status"], { label: string; tone: "active" | "wait" | "done" | "fail" }> = {
   nouă: { label: "În așteptare", tone: "active" },
@@ -288,6 +292,12 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   // Auzul instant: starea se citește din telefon și se reîmprospătează, ca Daniel să vadă dacă merge.
   useEffect(() => {
     setFastOn(fastHearing());
+    try {
+      wakeWordRef.current = localStorage.getItem(WAKE_KEY) === "1";
+      setWakeWord(wakeWordRef.current);
+    } catch {
+      // implicit oprit
+    }
     const timer = setInterval(() => setFastStatus(fastHearingStatus()), 3000);
     return () => clearInterval(timer);
   }, []);
@@ -598,6 +608,15 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
           });
     },
+    nu_deranja: async (parameters: { minute?: unknown }) => {
+      const raw = await callApi("/api/nu-deranja", "POST", { minute: Number(parameters.minute) || 0 });
+      if (raw.startsWith("Eroare")) return raw;
+      const data = JSON.parse(raw) as { pana?: string | null; amanate?: { titlu: string; text: string }[] };
+      if (data.pana) return `Liniște până la ${timeOf(new Date(data.pana))}. Spune doar, scurt, până la ce oră.`;
+      return data.amanate?.length
+        ? `Liniștea s-a oprit. Au venit între timp: ${data.amanate.map((item) => `${item.titlu}: ${item.text}`).join(" | ")}. Spune-le pe scurt.`
+        : "Liniștea s-a oprit și n-a venit nimic între timp.";
+    },
     // Imaginea se face pe server (OpenAI) și apare direct într-o fereastră; pe iPhone se salvează ținând apăsat pe ea.
     imagine_creeaza: async (parameters: { descriere?: unknown; format?: unknown; titlu?: unknown }) => {
       const raw = await callApi("/api/imagine", "POST", { descriere: asText(parameters.descriere), format: asText(parameters.format) || undefined });
@@ -896,6 +915,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [language, setLanguage] = useState<Language>("ro");
   // „La volan”: răspunsuri foarte scurte, totul cu vocea, nimic de citit.
   const [driving, setDriving] = useState(false);
+  const micRetryRef = useRef(0);
+  const standbyRef = useRef(0); // când a început așteptarea cuvântului „Argus”; 0 = nu așteaptă
+  const [standby, setStandby] = useState(false);
+  const [wakeWord, setWakeWord] = useState(false);
+  const wakeWordRef = useRef(false);
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
   // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
@@ -1131,6 +1155,25 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           setTimeout(listen, 600);
           return;
         }
+        // Microfonul a fost luat (un apel, Siri): îl cerem din nou o dată; dacă nu merge, oprim cu un mesaj, fără buclă.
+        if (error === "start") {
+          if (micRetryRef.current >= 2) {
+            micRetryRef.current = 0;
+            setError("Microfonul nu mai răspunde. Atinge din nou ca să pornești.");
+            end();
+            return;
+          }
+          micRetryRef.current += 1;
+          void openMic().then((problem) => {
+            if (!activeRef.current) return;
+            if (problem) {
+              setError("Microfonul nu mai răspunde. Atinge din nou ca să pornești.");
+              end();
+            } else setTimeout(listen, 300);
+          });
+          return;
+        }
+        micRetryRef.current = 0;
         if (error === "unsupported") {
           setError("Browserul ăsta nu știe dictare. Scrie-i lui Argus în câmpul de mai jos.");
           end();
@@ -1143,6 +1186,26 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           if (activeRef.current && answers.current.size > 0) setTimeout(listen, 150);
           return;
         }
+        // Așteaptă „Argus”: orice altceva auzit în mașină (radio, pasageri) se lasă deoparte.
+        if (standbyRef.current) {
+          const called = finalText.match(WAKE_WORD);
+          if (!called) {
+            if (Date.now() - standbyRef.current > STANDBY_MS || !drivingRef.current) end();
+            else setTimeout(listen, 150);
+            return;
+          }
+          leaveStandby();
+          const rest = finalText.slice(called[0].length).trim();
+          if (rest.length > 2) void ask(rest);
+          else
+            void say(spokenLanguage() === "ro" ? "Da?" : "Yes?").then(() => {
+              if (activeRef.current) {
+                setPhase("listening");
+                listen();
+              }
+            });
+          return;
+        }
         if (finalText && phaseRef.current === "listening") {
           quietRef.current = 0;
           void ask(finalText);
@@ -1150,8 +1213,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         }
         if (phaseRef.current === "listening" || answers.current.size > 0) {
           quietRef.current += 1;
-          if (quietRef.current >= (drivingRef.current ? DRIVING_QUIET_ROUNDS : QUIET_ROUNDS) && answers.current.size === 0) end();
-          else setTimeout(listen, 150);
+          const limit = drivingRef.current ? DRIVING_QUIET_ROUNDS : QUIET_ROUNDS;
+          if (quietRef.current >= limit && answers.current.size === 0) {
+            if (drivingRef.current && wakeWordRef.current) {
+              enterStandby();
+              setTimeout(listen, 150);
+            } else end();
+          } else setTimeout(listen, 150);
         }
       },
       (level) => {
@@ -1347,12 +1415,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     silentRef.current = false;
     if (drivingRef.current && spotifyConnected) {
       musicPausedRef.current = false;
-      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pauza_daca_canta" }) })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { pauzat?: boolean } | null) => {
-          if (data?.pauzat) musicPausedRef.current = true;
-        })
-        .catch(() => {});
+      pauseMusic();
     }
     // Memoria vine cât Argus salută, nu înainte.
     const memory = fetchMemory();
@@ -1361,13 +1424,69 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     await say(greetingFor(spokenLanguage()));
     historyRef.current = await memory;
     cleanRef.current = true;
+    // Ce a venit cât a fost „nu mă deranja”: se arată și se spune o singură dată, după salut.
+    void fetch("/api/nu-deranja", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { amanate?: { titlu: string; text: string }[] } | null) => {
+        const held = data?.amanate ?? [];
+        if (!held.length) return;
+        addCard({
+          id: crypto.randomUUID(),
+          kind: "summary",
+          title: "Cât ai avut liniște",
+          text: held.map((item) => `${item.titlu}: ${item.text}`).join("\n"),
+        });
+        const titles = held.slice(0, 3).map((item) => item.titlu).join("; ");
+        void report(
+          spokenLanguage() === "ro"
+            ? `Cât ai avut liniște au venit ${held.length === 1 ? "un lucru" : `${held.length} lucruri`}: ${titles}.`
+            : `While you were on do not disturb, ${held.length} things came in: ${titles}.`,
+        );
+      })
+      .catch(() => {});
     if (activeRef.current) {
       setPhase("listening");
       listen();
     }
   }
 
+  // Muzica se oprește cât vorbește cu Argus și pornește la loc când el doar așteaptă.
+  function pauseMusic() {
+    if (!spotifyConnected) return;
+    void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pauza_daca_canta" }) })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { pauzat?: boolean } | null) => {
+        if (!data?.pauzat) return;
+        musicPausedRef.current = true;
+        // Conversația s-a terminat sau așteaptă deja „Argus” cât venea răspunsul: muzica pornește la loc.
+        if (!activeRef.current || standbyRef.current) resumeMusic();
+      })
+      .catch(() => {});
+  }
+
+  function resumeMusic() {
+    if (!musicPausedRef.current) return;
+    musicPausedRef.current = false;
+    void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pune" }) }).catch(() => {});
+  }
+
+  function enterStandby() {
+    standbyRef.current = Date.now();
+    setStandby(true);
+    quietRef.current = 0;
+    resumeMusic();
+  }
+
+  function leaveStandby() {
+    standbyRef.current = 0;
+    setStandby(false);
+    quietRef.current = 0;
+    if (drivingRef.current) pauseMusic();
+  }
+
   function end() {
+    standbyRef.current = 0;
+    setStandby(false);
     if (musicPausedRef.current) {
       musicPausedRef.current = false;
       void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pune" }) }).catch(() => {});
@@ -1641,6 +1760,30 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             </dd>
           </div>
           <div>
+            <dt>„Argus” în mașină</dt>
+            <dd>
+              <button
+                type="button"
+                className="voice"
+                onClick={() => {
+                  const next = !wakeWord;
+                  try {
+                    if (next) localStorage.setItem(WAKE_KEY, "1");
+                    else localStorage.removeItem(WAKE_KEY);
+                  } catch {
+                    // fără memorare
+                  }
+                  wakeWordRef.current = next;
+                  setWakeWord(next);
+                }}
+                aria-pressed={wakeWord}
+                title="În modul mașină, după ce tace, Argus așteaptă să-l strigi pe nume (cel mult o oră). Tot ce se aude în mașină trece prin transcriere."
+              >
+                {wakeWord ? "Pornit" : "Oprit"}
+              </button>
+            </dd>
+          </div>
+          <div>
             <dt>Limbă</dt>
             <dd>
               <select id="language" className="voice" value={language} onChange={(event) => pickLanguage(event.target.value as Language)} aria-label="Limba în care vorbește Argus">
@@ -1824,7 +1967,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
               <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z" />
             </svg>
           </button>
-          <p className="car-status">{phase === "idle" ? "Atinge ca să vorbești" : label}</p>
+          <p className="car-status">{phase === "idle" ? "Atinge ca să vorbești" : standby ? "Spune „Argus” când ai nevoie" : label}</p>
           {pendingConfirm && pendingConfirm.kind === "confirm" && (
             <div className="car-confirm">
               <p>{pendingConfirm.title}</p>
