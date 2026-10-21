@@ -252,6 +252,19 @@ function asModule(value: unknown): Module | undefined {
   return (["agenda", "sarcini", "buget", "gmail"] as const).find((module) => module === text);
 }
 
+// Trimite eroarea la server o singură dată pe minut pentru același text, ca o buclă să nu umple coada.
+const reported = new Map<string, number>();
+function reportError(message: string, where: string) {
+  const now = Date.now();
+  if ((reported.get(message) ?? 0) > now - 60_000) return;
+  reported.set(message, now);
+  void fetch("/api/eroare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mesaj: message.slice(0, 400), unde: where, aparat: navigator.userAgent.slice(0, 120) }),
+  }).catch(() => {});
+}
+
 function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boolean; spotifyConnected: boolean }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -268,6 +281,25 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const logRef = useRef<HTMLDivElement>(null);
   const now = useClock();
   const [googleNotice, setGoogleNotice] = useState("");
+
+  // Orice eroare văzută aici ajunge și la Argus de pe laptop, care o verifică singur și îl anunță pe Daniel doar dacă e nevoie de el.
+  useEffect(() => {
+    if (error) reportError(error, "conversație");
+  }, [error]);
+  useEffect(() => {
+    // „Script error.” vine din scripturi străine fără detalii; nu ajută pe nimeni.
+    const onError = (event: ErrorEvent) => {
+      if (event.message && !/^script error\.?$/i.test(event.message)) reportError(event.message, "cod");
+    };
+    const onRejection = (event: PromiseRejectionEvent) =>
+      reportError(event.reason instanceof Error ? event.reason.message : String(event.reason ?? "promisiune respinsă"), "cod");
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
 
   // Mesajul de după conectarea la Google (?google=conectat).
   useEffect(() => {
