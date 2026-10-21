@@ -915,6 +915,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [language, setLanguage] = useState<Language>("ro");
   // „La volan”: răspunsuri foarte scurte, totul cu vocea, nimic de citit.
   const [driving, setDriving] = useState(false);
+  const micRetryRef = useRef(0);
   const standbyRef = useRef(0); // când a început așteptarea cuvântului „Argus”; 0 = nu așteaptă
   const [standby, setStandby] = useState(false);
   const [wakeWord, setWakeWord] = useState(false);
@@ -1154,6 +1155,25 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           setTimeout(listen, 600);
           return;
         }
+        // Microfonul a fost luat (un apel, Siri): îl cerem din nou o dată; dacă nu merge, oprim cu un mesaj, fără buclă.
+        if (error === "start") {
+          if (micRetryRef.current >= 2) {
+            micRetryRef.current = 0;
+            setError("Microfonul nu mai răspunde. Atinge din nou ca să pornești.");
+            end();
+            return;
+          }
+          micRetryRef.current += 1;
+          void openMic().then((problem) => {
+            if (!activeRef.current) return;
+            if (problem) {
+              setError("Microfonul nu mai răspunde. Atinge din nou ca să pornești.");
+              end();
+            } else setTimeout(listen, 300);
+          });
+          return;
+        }
+        micRetryRef.current = 0;
         if (error === "unsupported") {
           setError("Browserul ăsta nu știe dictare. Scrie-i lui Argus în câmpul de mai jos.");
           end();
@@ -1436,7 +1456,10 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pauza_daca_canta" }) })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { pauzat?: boolean } | null) => {
-        if (data?.pauzat) musicPausedRef.current = true;
+        if (!data?.pauzat) return;
+        musicPausedRef.current = true;
+        // Conversația s-a terminat sau așteaptă deja „Argus” cât venea răspunsul: muzica pornește la loc.
+        if (!activeRef.current || standbyRef.current) resumeMusic();
       })
       .catch(() => {});
   }

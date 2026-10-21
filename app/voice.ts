@@ -205,6 +205,40 @@ export function primeSpeech() {
   synth.speak(new SpeechSynthesisUtterance(""));
 }
 
+// Pe iPhone, resume() poate rămâne agățat cât e un apel sau Siri; nu așteptăm mai mult de o secundă.
+function resumeAudio(ctx: AudioContext): Promise<void> {
+  if (ctx.state === "running") return Promise.resolve();
+  return Promise.race([ctx.resume().catch(() => {}), new Promise<void>((resolve) => setTimeout(resolve, 1000))]);
+}
+
+// Așteaptă să se termine sunetul programat până la `end` (în ceasul AudioContext). Pe lângă onended, un ceas de rezervă:
+// dacă sunetul e oprit de iPhone (apel, Siri) mai mult de 3 secunde, mergem mai departe, ca Argus să nu rămână agățat.
+function waitUntilPlayed(ctx: AudioContext, node: AudioBufferSourceNode, end: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (!playing.has(node)) return resolve();
+    let stalled = 0;
+    const done = () => {
+      clearInterval(watch);
+      if (finishCurrent === done) finishCurrent = null;
+      playing.delete(node);
+      resolve();
+    };
+    const watch = setInterval(() => {
+      if (!playing.has(node)) return done();
+      if (ctx.state === "running") {
+        stalled = 0;
+        if (ctx.currentTime > end + 0.5) done();
+      } else if ((stalled += 500) >= 3000) done();
+    }, 500);
+    finishCurrent = done;
+    node.onended = done;
+  });
+}
+
+// Citirea din rețea care cântă acum; o oprim când Daniel întrerupe.
+let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+const READ_TIMEOUT_MS = 8000;
+
 let finishCurrent: (() => void) | null = null;
 let wakeStream: (() => void) | null = null;
 let speakGeneration = 0;
@@ -221,6 +255,8 @@ export function stopSpeaking() {
     }
   }
   playing.clear();
+  activeReader?.cancel().catch(() => {});
+  activeReader = null;
   window.speechSynthesis?.cancel();
   // Unele browsere nu anunță sfârșitul frazelor anulate; închidem noi promisiunea.
   finishCurrent?.();
@@ -244,7 +280,7 @@ export function speakStream(): { push: (sentence: string) => void; finish: () =>
     resume?.();
   };
   const loop = (async () => {
-    if (ctx.state !== "running") await ctx.resume().catch(() => {});
+    await resumeAudio(ctx);
     for (let index = 0; ; ) {
       if (generation !== speakGeneration) return;
       if (index >= queue.length) {
@@ -343,14 +379,8 @@ function playSamples(ctx: AudioContext, samples: Float32Array, generation: numbe
     node.buffer = buffer;
     node.connect(ctx.destination);
     playing.add(node);
-    const done = () => {
-      if (finishCurrent === done) finishCurrent = null;
-      playing.delete(node);
-      resolve();
-    };
-    finishCurrent = done;
-    node.onended = done;
     node.start();
+    void waitUntilPlayed(ctx, node, ctx.currentTime + buffer.duration).then(resolve);
   });
 }
 
@@ -358,6 +388,7 @@ function playSamples(ctx: AudioContext, samples: Float32Array, generation: numbe
 // Se termină când a cântat tot; aruncă eroare doar dacă n-a venit nimic de cântat.
 async function playStream(ctx: AudioContext, response: Response, generation: number): Promise<void> {
   const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  activeReader = reader;
   let carry: number | null = null; // un octet rămas din bucata trecută
   let pending: Float32Array[] = [];
   let pendingLength = 0;
@@ -387,7 +418,20 @@ async function playStream(ctx: AudioContext, response: Response, generation: num
   };
 
   for (;;) {
-    const { value, done } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      chunk = await Promise.race([
+        reader.read(),
+        new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("rețea")), READ_TIMEOUT_MS))),
+      ]).finally(() => clearTimeout(timer));
+    } catch (caught) {
+      reader.cancel().catch(() => {});
+      // S-a rupt rețeaua la mijlocul frazei: cântăm ce a venit; doar dacă n-a venit nimic, încearcă altă voce.
+      if (last || generation !== speakGeneration) break;
+      throw caught;
+    }
+    const { value, done } = chunk;
     if (generation !== speakGeneration) {
       reader.cancel().catch(() => {});
       return;
@@ -410,22 +454,12 @@ async function playStream(ctx: AudioContext, response: Response, generation: num
     const ahead = playhead - ctx.currentTime;
     if (pendingLength >= PCM_RATE * (ahead < 0.25 ? 0.1 : 0.5)) flush();
   }
+  if (activeReader === reader) activeReader = null;
+  if (generation !== speakGeneration) return;
   flush();
   const tail = last as AudioBufferSourceNode | null;
-  if (!tail) {
-    if (generation === speakGeneration) throw new Error("fără sunet");
-    return;
-  }
-  await new Promise<void>((resolve) => {
-    if (!playing.has(tail)) return resolve();
-    const done = () => {
-      if (finishCurrent === done) finishCurrent = null;
-      playing.delete(tail);
-      resolve();
-    };
-    finishCurrent = done;
-    tail.onended = done;
-  });
+  if (!tail) throw new Error("fără sunet");
+  await waitUntilPlayed(ctx, tail, playhead);
 }
 
 async function cloudSpeak(text: string): Promise<void> {
@@ -433,7 +467,7 @@ async function cloudSpeak(text: string): Promise<void> {
   const generation = speakGeneration;
   const ctx = audio();
   if (!ctx) return browserSpeak(text);
-  if (ctx.state !== "running") await ctx.resume().catch(() => {});
+  await resumeAudio(ctx);
   const known = phrases.get(phraseKey(text));
   if (known) return playSamples(ctx, known, generation);
   const parts = chunks(text);
@@ -515,6 +549,8 @@ export function fastHearingStatus(): string {
 
 type Live = {
   socket: WebSocket;
+  item: string | null; // replica de acum; ce vine pentru alta (o rundă veche) se ignoră
+  old: Set<string>; // replicile terminate sau lăsate baltă
   text: string;
   onDelta: ((text: string) => void) | null;
   waiting: ((text: string | null) => void) | null;
@@ -536,20 +572,29 @@ function openLive(): Promise<Live | null> {
         return null;
       }
       const socket = new WebSocket("wss://api.openai.com/v1/realtime", ["realtime", `openai-insecure-api-key.${data.cheie}`]);
-      const entry: Live = { socket, text: "", onDelta: null, waiting: null };
+      const entry: Live = { socket, item: null, old: new Set(), text: "", onDelta: null, waiting: null };
       const settle = (text: string | null) => {
         const resolve = entry.waiting;
         entry.waiting = null;
         entry.text = "";
+        if (entry.item) entry.old.add(entry.item);
+        entry.item = null;
         resolve?.(text);
       };
       socket.onmessage = (event) => {
-        let message: { type?: string; delta?: string; transcript?: string; error?: { message?: string } };
+        let message: { type?: string; item_id?: string; delta?: string; transcript?: string; error?: { message?: string } };
         try {
           message = JSON.parse(String(event.data));
         } catch {
           return;
         }
+        if (message.item_id) {
+          if (entry.old.has(message.item_id)) return;
+          // Prima replică nouă de după începutul rundei e a noastră (textul poate veni chiar cât vorbește).
+          if (!entry.item) entry.item = message.item_id;
+          else if (message.item_id !== entry.item) return;
+        }
+        if (message.type === "input_audio_buffer.committed") return;
         if (message.type === "conversation.item.input_audio_transcription.delta" && message.delta) {
           entry.text += message.delta;
           entry.onDelta?.(entry.text);
@@ -645,6 +690,8 @@ function cloudListen(
   if (liveEntry) {
     sendLive(liveEntry, { type: "input_audio_buffer.clear" });
     liveEntry.text = "";
+    if (liveEntry.item) liveEntry.old.add(liveEntry.item);
+    liveEntry.item = null;
     liveEntry.onDelta = (text) => onHeard({ text, final: false });
     tap = ctx.createScriptProcessor(2048, 1, 1);
     tap.onaudioprocess = (event) => {
@@ -676,7 +723,19 @@ function cloudListen(
     const now = performance.now();
     // O notificare pe iPhone oprește sunetul câteva clipe: nu o luăm drept liniște și nu tăiem ce spune Daniel.
     const track = stream.getAudioTracks()[0];
-    if (ctx.state !== "running" || track?.muted || track?.readyState === "ended") {
+    // Microfonul a fost luat de alt program (un apel, Siri): runda se termină și se cere din nou.
+    if (!stream.active || track?.readyState === "ended") {
+      cleanup();
+      aborted = true;
+      if (recorder.state !== "inactive") recorder.stop();
+      onEnd("start");
+      return;
+    }
+    if (now - startedAt > MAX_LISTEN_MS) {
+      finishRecording();
+      return;
+    }
+    if (ctx.state !== "running" || track?.muted) {
       if (ctx.state !== "running") void ctx.resume().catch(() => {});
       lastVoice = now;
       return;
@@ -707,7 +766,6 @@ function cloudListen(
     input.disconnect();
     tap?.disconnect();
     if (tap) tap.onaudioprocess = null;
-    if (liveEntry) liveEntry.onDelta = null;
   }
 
   // Textul de la auzul instant, dacă vine la timp; altfel null și trimitem înregistrarea.
@@ -716,6 +774,8 @@ function cloudListen(
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         if (liveEntry.waiting === finish) liveEntry.waiting = null;
+        if (liveEntry.item) liveEntry.old.add(liveEntry.item);
+        liveEntry.item = null;
         resolve(null);
       }, LIVE_WAIT_MS);
       const finish = (text: string | null) => {
@@ -739,6 +799,7 @@ function cloudListen(
     if (aborted) return;
     if (!spoke || pieces.length === 0) return onEnd();
     const fast = await quick;
+    if (liveEntry) liveEntry.onDelta = null;
     if (aborted) return;
     if (fast !== null && fast.trim()) {
       onHeard({ text: fast.trim(), final: true });
@@ -769,6 +830,7 @@ function cloudListen(
   }
   return () => {
     aborted = true;
+    if (liveEntry) liveEntry.onDelta = null;
     cleanup();
     if (recorder.state !== "inactive") recorder.stop();
   };
