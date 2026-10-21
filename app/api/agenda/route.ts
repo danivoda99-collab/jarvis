@@ -18,12 +18,16 @@ function failure(caught: unknown) {
   return NextResponse.json({ error: message }, { status: 502 });
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const MINUTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
 // Citește evenimentele dintre două zile (inclusiv), din calendarul principal.
 export async function GET(request: Request) {
   if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
   const params = new URL(request.url).searchParams;
   const from = params.get("de_la") || todayInBucharest();
   const to = params.get("pana_la") || from;
+  if (!DAY.test(from) || !DAY.test(to)) return NextResponse.json({ error: "Zilele trebuie scrise AAAA-LL-ZZ." }, { status: 400 });
   const query = new URLSearchParams({
     timeMin: bucharestIso(`${from}T00:00`),
     timeMax: bucharestIso(`${addDays(to, 1)}T00:00`),
@@ -59,6 +63,9 @@ export async function POST(request: Request) {
   };
   if (!body.titlu || !body.inceput) {
     return NextResponse.json({ error: "Lipsesc titlul sau ora de început." }, { status: 400 });
+  }
+  if (!MINUTE.test(String(body.inceput)) || (body.sfarsit && !MINUTE.test(String(body.sfarsit)))) {
+    return NextResponse.json({ error: "Ora trebuie scrisă AAAA-LL-ZZTHH:MM." }, { status: 400 });
   }
   const start = body.inceput.slice(0, 16);
   const end = body.sfarsit?.slice(0, 16) || new Date(new Date(`${start}:00Z`).getTime() + 3600_000).toISOString().slice(0, 16);
@@ -104,6 +111,9 @@ export async function PATCH(request: Request) {
     descriere?: string;
   };
   if (!body.id) return NextResponse.json({ error: "Lipsește evenimentul." }, { status: 400 });
+  if ((body.inceput && !MINUTE.test(String(body.inceput))) || (body.sfarsit && !MINUTE.test(String(body.sfarsit)))) {
+    return NextResponse.json({ error: "Ora trebuie scrisă AAAA-LL-ZZTHH:MM." }, { status: 400 });
+  }
   const url = `${CALENDAR}/${encodeURIComponent(body.id)}`;
   try {
     const changes: Record<string, unknown> = {};

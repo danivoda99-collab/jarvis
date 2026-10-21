@@ -8,8 +8,8 @@ async function guard() {
   return (await isAuthenticated()) ? null : NextResponse.json({ error: "Neautentificat." }, { status: 401 });
 }
 
-function failure(caught: unknown) {
-  return NextResponse.json({ error: caught instanceof Error ? caught.message : "Urmăririle nu răspund." }, { status: 502 });
+function failure(caught: unknown, status = 502) {
+  return NextResponse.json({ error: caught instanceof Error ? caught.message : "Urmăririle nu răspund." }, { status });
 }
 
 export async function GET() {
@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     const item = await addUrmarire(ce, conditie, Math.round((Number(body.interval_ore) || 2) * 60), Number(body.zile) || 7);
     return NextResponse.json({ ok: true, id: item.id, pana: item.pana });
   } catch (caught) {
-    return failure(caught);
+    // Limita de urmăriri active e un răspuns, nu o pană.
+    return failure(caught, caught instanceof Error && caught.message.startsWith("Sunt deja") ? 409 : 502);
   }
 }
 

@@ -50,6 +50,8 @@ Răspunzi DOAR cu un JSON: {"fapte": ["propoziție scurtă în română", ...]},
     for (const fapt of noi.reverse()) await addFapt(fapt);
     return NextResponse.json({ ok: true, noi: noi.length });
   } catch {
+    // Încercarea eșuată nu blochează următoarea rulare.
+    await command("DEL", LOCK).catch(() => undefined);
     return NextResponse.json({ error: "Nu am putut reciti jurnalul." }, { status: 502 });
   }
 }
