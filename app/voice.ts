@@ -463,6 +463,7 @@ export async function openMic(): Promise<string | undefined> {
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
+    void openLive();
     return undefined;
   } catch (caught) {
     return caught instanceof DOMException && caught.name === "NotAllowedError" ? "not-allowed" : "start";
@@ -472,6 +473,138 @@ export async function openMic(): Promise<string | undefined> {
 export function closeMic() {
   micStream?.getTracks().forEach((track) => track.stop());
   micStream = null;
+  closeLive();
+}
+
+// --- Auzul instant (în test): vocea pleacă la OpenAI pe măsură ce vorbește Daniel ----------
+// Textul vine bucată cu bucată și e gata aproape imediat ce tace. Dacă nu merge, se folosește înregistrarea, ca până acum.
+
+const FAST_KEY = "argus-auz-instant";
+const LIVE_RATE = 24_000;
+const LIVE_WAIT_MS = 3000; // cât așteptăm textul final după ce tace, înainte să trimitem înregistrarea
+
+export function fastHearing(): boolean {
+  try {
+    return localStorage.getItem(FAST_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function chooseFastHearing(on: boolean) {
+  try {
+    if (on) localStorage.setItem(FAST_KEY, "1");
+    else localStorage.removeItem(FAST_KEY);
+  } catch {
+    // fără memorare
+  }
+  liveProblem = "";
+  if (on && micStream?.active) void openLive();
+  if (!on) closeLive();
+}
+
+// Ultimul motiv pentru care auzul instant n-a mers, ca Daniel să-l vadă în Setări.
+let liveProblem = "";
+let liveUsed = 0;
+
+export function fastHearingStatus(): string {
+  if (!fastHearing()) return "";
+  if (liveProblem) return `nu merge: ${liveProblem}`;
+  return liveUsed > 0 ? `merge (${liveUsed} replici)` : "pornit";
+}
+
+type Live = {
+  socket: WebSocket;
+  text: string;
+  onDelta: ((text: string) => void) | null;
+  waiting: ((text: string | null) => void) | null;
+};
+
+let live: Live | null = null;
+let liveOpening: Promise<Live | null> | null = null;
+
+function openLive(): Promise<Live | null> {
+  if (!cloud || !fastHearing() || typeof WebSocket === "undefined") return Promise.resolve(null);
+  if (live && live.socket.readyState <= WebSocket.OPEN) return Promise.resolve(live);
+  if (liveOpening) return liveOpening;
+  liveOpening = (async () => {
+    try {
+      const response = await fetch("/api/asculta/cheie", { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as { cheie?: string; error?: string };
+      if (!response.ok || !data.cheie) {
+        liveProblem = data.error || `cheia a dat eroare ${response.status}`;
+        return null;
+      }
+      const socket = new WebSocket("wss://api.openai.com/v1/realtime", ["realtime", `openai-insecure-api-key.${data.cheie}`]);
+      const entry: Live = { socket, text: "", onDelta: null, waiting: null };
+      const settle = (text: string | null) => {
+        const resolve = entry.waiting;
+        entry.waiting = null;
+        entry.text = "";
+        resolve?.(text);
+      };
+      socket.onmessage = (event) => {
+        let message: { type?: string; delta?: string; transcript?: string; error?: { message?: string } };
+        try {
+          message = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
+        if (message.type === "conversation.item.input_audio_transcription.delta" && message.delta) {
+          entry.text += message.delta;
+          entry.onDelta?.(entry.text);
+        } else if (message.type === "conversation.item.input_audio_transcription.completed") {
+          liveProblem = "";
+          liveUsed += 1;
+          settle(message.transcript ?? entry.text);
+        } else if (message.type === "error") {
+          liveProblem = message.error?.message?.slice(0, 160) || "eroare de la OpenAI";
+          settle(null);
+        }
+      };
+      socket.onclose = (event) => {
+        if (live === entry) live = null;
+        if (event.code !== 1000 && !liveProblem) liveProblem = `legătura s-a închis (${event.code}${event.reason ? `: ${event.reason.slice(0, 80)}` : ""})`;
+        settle(null);
+      };
+      live = entry;
+      return entry;
+    } catch {
+      liveProblem = "nu pot porni legătura";
+      return null;
+    } finally {
+      liveOpening = null;
+    }
+  })();
+  return liveOpening;
+}
+
+function closeLive() {
+  const entry = live;
+  live = null;
+  entry?.socket.close(1000);
+}
+
+function sendLive(entry: Live, event: object) {
+  if (entry.socket.readyState === WebSocket.OPEN) entry.socket.send(JSON.stringify(event));
+}
+
+// Microfonul merge la 44,1 sau 48 kHz; OpenAI vrea 24 kHz, 16 biți, în base64.
+function livePcm(input: Float32Array, rate: number): string {
+  const ratio = rate / LIVE_RATE;
+  const length = Math.floor(input.length / ratio);
+  const samples = new Int16Array(length);
+  for (let index = 0; index < length; index += 1) {
+    const from = Math.floor(index * ratio);
+    const to = Math.max(from + 1, Math.min(input.length, Math.floor((index + 1) * ratio)));
+    let sum = 0;
+    for (let position = from; position < to; position += 1) sum += input[position];
+    samples[index] = Math.max(-1, Math.min(1, sum / (to - from))) * 0x7fff;
+  }
+  const bytes = new Uint8Array(samples.buffer);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
 }
 
 function recorderType(): string {
@@ -505,6 +638,21 @@ function cloudListen(
   const input = ctx.createMediaStreamSource(stream);
   input.connect(analyser);
   const samples = new Float32Array(analyser.fftSize);
+  // Cu auzul instant, sunetul pleacă și direct la OpenAI cât vorbește; înregistrarea rămâne ca rezervă.
+  const liveEntry = live && live.socket.readyState === WebSocket.OPEN ? live : null;
+  if (!liveEntry && fastHearing()) void openLive();
+  let tap: ScriptProcessorNode | null = null;
+  if (liveEntry) {
+    sendLive(liveEntry, { type: "input_audio_buffer.clear" });
+    liveEntry.text = "";
+    liveEntry.onDelta = (text) => onHeard({ text, final: false });
+    tap = ctx.createScriptProcessor(2048, 1, 1);
+    tap.onaudioprocess = (event) => {
+      sendLive(liveEntry, { type: "input_audio_buffer.append", audio: livePcm(event.inputBuffer.getChannelData(0), ctx.sampleRate) });
+    };
+    input.connect(tap);
+    tap.connect(ctx.destination);
+  }
   const type = recorderType();
   const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
   const pieces: Blob[] = [];
@@ -557,16 +705,45 @@ function cloudListen(
     userTalking = false;
     clearInterval(timer);
     input.disconnect();
+    tap?.disconnect();
+    if (tap) tap.onaudioprocess = null;
+    if (liveEntry) liveEntry.onDelta = null;
   }
+
+  // Textul de la auzul instant, dacă vine la timp; altfel null și trimitem înregistrarea.
+  function liveText(): Promise<string | null> {
+    if (!liveEntry || liveEntry.socket.readyState !== WebSocket.OPEN) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        if (liveEntry.waiting === finish) liveEntry.waiting = null;
+        resolve(null);
+      }, LIVE_WAIT_MS);
+      const finish = (text: string | null) => {
+        clearTimeout(timeout);
+        resolve(text);
+      };
+      liveEntry.waiting = finish;
+      sendLive(liveEntry, { type: "input_audio_buffer.commit" });
+    });
+  }
+
+  let quick: Promise<string | null> = Promise.resolve(null);
 
   function finishRecording() {
     cleanup();
+    if (spoke) quick = liveText();
     if (recorder.state !== "inactive") recorder.stop();
   }
 
   recorder.onstop = async () => {
     if (aborted) return;
     if (!spoke || pieces.length === 0) return onEnd();
+    const fast = await quick;
+    if (aborted) return;
+    if (fast !== null && fast.trim()) {
+      onHeard({ text: fast.trim(), final: true });
+      return onEnd();
+    }
     onHeard({ text: "…", final: false });
     const blob = new Blob(pieces, { type: recorder.mimeType || type || "audio/webm" });
     const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";

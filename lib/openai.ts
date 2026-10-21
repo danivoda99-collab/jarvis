@@ -5,6 +5,8 @@
 export const OPENAI_VOICES = ["cedar", "marin", "ash", "echo", "onyx", "ballad", "verse", "sage", "fable", "alloy", "coral", "nova", "shimmer"];
 
 export const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
+// Auzul instant (transcriere în timp real); se poate schimba din Vercel dacă OpenAI scoate un model mai bun.
+export const REALTIME_STT_MODEL = process.env.OPENAI_REALTIME_STT_MODEL || "gpt-live-transcribe";
 export const TTS_MODEL = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
 
 export function defaultVoice(): string {
