@@ -309,6 +309,51 @@ async function requestSpeech(text: string): Promise<Response> {
   return response;
 }
 
+function pcmToFloat(bytes: Uint8Array): Float32Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length - (bytes.length % 2));
+  const samples = new Float32Array(view.byteLength / 2);
+  for (let index = 0; index < samples.length; index += 1) samples[index] = view.getInt16(index * 2, true) / 32768;
+  return samples;
+}
+
+// Frazele fixe (salutul) rămân în memorie după ce le aducem o dată, ca să pornească pe loc.
+const phrases = new Map<string, Float32Array>();
+
+function phraseKey(text: string) {
+  return `${chosenVoiceName() || cloudDefault}|${spokenLanguage()}|${text.trim()}`;
+}
+
+export function preloadPhrase(text: string) {
+  const key = phraseKey(text);
+  if (!cloud || phrases.has(key)) return;
+  requestSpeech(text.trim())
+    .then((response) => response.arrayBuffer())
+    .then((buffer) => {
+      if (buffer.byteLength > 0) phrases.set(key, pcmToFloat(new Uint8Array(buffer)));
+    })
+    .catch(() => {});
+}
+
+function playSamples(ctx: AudioContext, samples: Float32Array, generation: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (generation !== speakGeneration || !samples.length) return resolve();
+    const buffer = ctx.createBuffer(1, samples.length, PCM_RATE);
+    buffer.getChannelData(0).set(samples);
+    const node = ctx.createBufferSource();
+    node.buffer = buffer;
+    node.connect(ctx.destination);
+    playing.add(node);
+    const done = () => {
+      if (finishCurrent === done) finishCurrent = null;
+      playing.delete(node);
+      resolve();
+    };
+    finishCurrent = done;
+    node.onended = done;
+    node.start();
+  });
+}
+
 // Cântă o frază cât încă se descarcă: primele ~0,1 secunde pornesc imediat, restul se leagă în continuare.
 // Se termină când a cântat tot; aruncă eroare doar dacă n-a venit nimic de cântat.
 async function playStream(ctx: AudioContext, response: Response, generation: number): Promise<void> {
@@ -357,11 +402,8 @@ async function playStream(ctx: AudioContext, response: Response, generation: num
       bytes = joined;
       carry = null;
     }
-    const even = bytes.length - (bytes.length % 2);
-    if (even < bytes.length) carry = bytes[even];
-    const view = new DataView(bytes.buffer, bytes.byteOffset, even);
-    const samples = new Float32Array(even / 2);
-    for (let index = 0; index < samples.length; index += 1) samples[index] = view.getInt16(index * 2, true) / 32768;
+    if (bytes.length % 2) carry = bytes[bytes.length - 1];
+    const samples = pcmToFloat(bytes);
     pending.push(samples);
     pendingLength += samples.length;
     // Când e aproape să rămână fără sunet, pornim bucăți mici; altfel le adunăm câte o jumătate de secundă.
@@ -392,6 +434,8 @@ async function cloudSpeak(text: string): Promise<void> {
   const ctx = audio();
   if (!ctx) return browserSpeak(text);
   if (ctx.state !== "running") await ctx.resume().catch(() => {});
+  const known = phrases.get(phraseKey(text));
+  if (known) return playSamples(ctx, known, generation);
   const parts = chunks(text);
   const pending = parts.map((part) => requestSpeech(part));
   pending.forEach((promise) => promise.catch(() => {}));

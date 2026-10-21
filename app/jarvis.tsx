@@ -18,6 +18,7 @@ import {
   isUserTalking,
   listenOnce,
   openMic,
+  preloadPhrase,
   primeSpeech,
   setCloudVoice,
   speak,
@@ -48,6 +49,7 @@ const GREETING = {
   spoken: "Hello Daniel, Argus online. What are we breaking today?",
   ro: "Salut, Daniel! Argus e aici. Cu ce rupem topurile azi?",
 };
+const greetingFor = (language: Language) => (language === "ro" ? GREETING.ro : GREETING.spoken);
 const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
 
@@ -994,6 +996,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         setVoices(data.voci);
         setVoiceName(data.voci.includes(saved) ? saved : fallback);
         setCanListenNow(canListen());
+        preloadPhrase(greetingFor(spokenLanguage()));
       })
       .catch(() => {})
       .finally(voiceCheckDone);
@@ -1307,11 +1310,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         })
         .catch(() => {});
     }
-    historyRef.current = await fetchMemory();
-    cleanRef.current = true;
+    // Memoria vine cât Argus salută, nu înainte.
+    const memory = fetchMemory();
     quietRef.current = 0;
     log("agent", GREETING.ro);
-    await say(spokenLanguage() === "ro" ? GREETING.ro : GREETING.spoken);
+    await say(greetingFor(spokenLanguage()));
+    historyRef.current = await memory;
+    cleanRef.current = true;
     if (activeRef.current) {
       setPhase("listening");
       listen();
@@ -1468,6 +1473,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     setVoiceName(name);
     primeSpeech();
     void speak(VOICE_CHECK[spokenLanguage()]);
+    preloadPhrase(greetingFor(spokenLanguage()));
   }
 
   const activeProjects = projects.filter((item) => ["nouă", "în lucru", "confirmată", "așteaptă confirmare"].includes(item.status)).length;
@@ -1498,6 +1504,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     setLanguage(next);
     primeSpeech();
     void speak(VOICE_CHECK[next]);
+    preloadPhrase(greetingFor(next));
   }
 
   // Pe desktop, Space pornește și oprește conversația.
