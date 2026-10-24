@@ -10,14 +10,15 @@ export async function POST() {
   const key = openaiKey();
   if (!key) return NextResponse.json({ error: "Lipsește cheia OPENAI_API_KEY în Vercel." }, { status: 501 });
   const names = await knownNames().catch(() => [] as string[]);
-  // OpenAI primește cel mult 1024 de caractere; numele intră câte încap, primele fiind cele mai importante.
-  let prompt = "Argus, accept. Argus, refuz. Agenda, to-do, buget, OVB, Alba Iulia, București.";
+  // OpenAI primește cel mult 1024; numărăm în octeți (diacriticele cântăresc dublu) și lăsăm marjă.
+  // Numele intră câte încap, primele fiind cele mai importante.
+  const base = "Argus, accept. Argus, refuz. Agenda, to-do, buget, OVB, Alba Iulia, București.";
   const kept: string[] = [];
   for (const name of names) {
-    if (prompt.length + [...kept, name].join(", ").length + 2 > 1000) break;
+    if (Buffer.byteLength(`${base} ${[...kept, name].join(", ")}.`) > 900) break;
     kept.push(name);
   }
-  if (kept.length) prompt += ` ${kept.join(", ")}.`;
+  const prompt = kept.length ? `${base} ${kept.join(", ")}.` : base;
   try {
     const response = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
