@@ -1117,6 +1117,7 @@ async function prepareMeetings(config) {
         `Pregătește-l pe Daniel pentru întâlnirea „${meeting.titlu}” de la ${at} (id în Calendar: ${meeting.id}).`,
         "Din agendă: cine participă, unde e și descrierea. Din Gmail: ultimele 2-3 mailuri cu participanții, pe scurt. Dacă e cineva din echipa Voda, cifrele lui agregate din centralizator (doar citire).",
         "Dacă e o întâlnire cu un client OVB, nu cauți și nu scrii nimic despre client: doar ora, locul și ce are Daniel în agendă înainte și după.",
+        "Dacă locul e o adresă fizică (nu online), pui pe un rând separat linkul de drum [Navighează](https://waze.com/ul?q=<adresa codificată pentru URL>&navigate=yes), ca Daniel să plece cu o atingere.",
         `Rezumatul începe cu o propoziție bună de citit cu voce, de exemplu „La ${at} ai ${meeting.titlu}.”, apoi cel mult 6 rânduri și, la final, 3 puncte de discutat. Nu trimiți nimic.`,
       ].join("\n\n"),
     });
