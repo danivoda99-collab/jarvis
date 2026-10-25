@@ -151,6 +151,24 @@ const DRIVING_QUIET_ROUNDS = 15; // în mașină ascultă mai mult (cam două mi
 // În mașină, cu „Argus” ca cuvânt de trezire: după ascultarea obișnuită, așteaptă să fie strigat (cel mult o oră).
 const WAKE_KEY = "argus-trezire";
 const STANDBY_MS = 60 * 60_000;
+// Brief-ul de dimineață din oficiu: prima deschidere dintre 5 și 11, o dată pe zi.
+const BRIEF_KEY = "argus-brief-auto";
+const BRIEF_DAY_KEY = "argus-brief-zi";
+
+function briefDue(): boolean {
+  try {
+    if (localStorage.getItem(BRIEF_KEY) !== "1") return false;
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+    const hour = Number(part("hour"));
+    const day = `${part("year")}-${part("month")}-${part("day")}`;
+    if (hour < 5 || hour >= 11 || localStorage.getItem(BRIEF_DAY_KEY) === day) return false;
+    localStorage.setItem(BRIEF_DAY_KEY, day);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const WAKE_WORD = /^\W*(?:hei|hey|bun[ăa])?\W*argus\b[\s,.!?:;-]*/i;
 
 const PROJECT_STATE: Record<Cerere["status"], { label: string; tone: "active" | "wait" | "done" | "fail" }> = {
@@ -301,6 +319,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     try {
       wakeWordRef.current = localStorage.getItem(WAKE_KEY) === "1";
       setWakeWord(wakeWordRef.current);
+      setBriefAuto(localStorage.getItem(BRIEF_KEY) === "1");
     } catch {
       // implicit oprit
     }
@@ -929,6 +948,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const standbyRef = useRef(0); // când a început așteptarea cuvântului „Argus”; 0 = nu așteaptă
   const [standby, setStandby] = useState(false);
   const [wakeWord, setWakeWord] = useState(false);
+  const [briefAuto, setBriefAuto] = useState(false);
   const wakeWordRef = useRef(false);
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
@@ -1437,25 +1457,35 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     historyRef.current = await memory;
     cleanRef.current = true;
     // Ce a venit cât a fost „nu mă deranja” (sau ce a notat serverul noaptea): se arată și se spune o singură dată, după salut.
-    void fetch("/api/nu-deranja", { cache: "no-store" })
+    const brief = briefDue();
+    const heldItems = fetch("/api/nu-deranja", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { amanate?: { titlu: string; text: string }[] } | null) => {
         const held = data?.amanate ?? [];
-        if (!held.length) return;
+        if (!held.length) return held;
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
           title: "Între timp",
           text: held.map((item) => `${item.titlu}: ${item.text}`).join("\n"),
         });
+        // Dimineața le spune brief-ul, ca să nu vorbească doi deodată.
+        if (brief) return held;
         const titles = held.slice(0, 3).map((item) => item.titlu).join("; ");
         void report(
           spokenLanguage() === "ro"
             ? `Între timp ${held.length === 1 ? "a venit un lucru" : `au venit ${held.length} lucruri`}: ${titles}.`
             : `While you were away, ${held.length} things came in: ${titles}.`,
         );
+        return held;
       })
-      .catch(() => {});
+      .catch(() => [] as { titlu: string; text: string }[]);
+    if (brief && activeRef.current) {
+      const held = await heldItems;
+      const extra = held.length ? ` Între timp au venit: ${held.slice(0, 5).map((item) => item.titlu).join("; ")}.` : "";
+      await ask(`Brief-ul zilei (pornit singur, la prima deschidere de dimineață).${extra}`);
+      return;
+    }
     if (activeRef.current) {
       setPhase("listening");
       listen();
@@ -1793,6 +1823,29 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
                 title="În modul mașină, după ce tace, Argus așteaptă să-l strigi pe nume (cel mult o oră). Tot ce se aude în mașină trece prin transcriere."
               >
                 {wakeWord ? "Pornit" : "Oprit"}
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>Brief dimineața</dt>
+            <dd>
+              <button
+                type="button"
+                className="voice"
+                onClick={() => {
+                  const next = !briefAuto;
+                  try {
+                    if (next) localStorage.setItem(BRIEF_KEY, "1");
+                    else localStorage.removeItem(BRIEF_KEY);
+                  } catch {
+                    // fără memorare
+                  }
+                  setBriefAuto(next);
+                }}
+                aria-pressed={briefAuto}
+                title="Prima dată când pornești Argus între 5 și 11, îți spune singur agenda, sarcinile, bugetul și vremea."
+              >
+                {briefAuto ? "Pornit" : "Oprit"}
               </button>
             </dd>
           </div>
