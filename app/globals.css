@@ -1814,3 +1814,18 @@ body {
 .help-form button:disabled {
   opacity: 0.5;
 }
+
+/* Laptopul nu mai răspunde: un semn discret sus și o explicație în „Lucrări”. */
+.laptop-off {
+  color: var(--danger);
+}
+
+.laptop-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 1.4;
+}

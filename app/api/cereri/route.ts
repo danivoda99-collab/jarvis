@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { firstSentence, markOpen, notify } from "@/lib/push";
-import { QueueError, addCerere, getCerere, listCereri, readSignal, saveCerere, saveIfStatus, type Cerere, type Status } from "@/lib/cereri";
+import { QueueError, addCerere, awayText, laptopAway, getCerere, listCereri, readSignal, saveCerere, saveIfStatus, type Cerere, type Status } from "@/lib/cereri";
 import { cleanVizual } from "@/lib/vizual";
 import { deliverLines } from "@/lib/ajutor";
 
@@ -24,7 +24,11 @@ export async function GET(request: Request) {
     // Telefonul cu aplicația deschisă: rezultatele le aude direct, deci fără notificări.
     if (params.has("tel")) await markOpen();
     if (params.has("semnal")) {
-      return NextResponse.json({ semnal: await readSignal() }, { headers: { "Cache-Control": "no-store" } });
+      // Doar laptopul cere semnalul fără „tel”; așa știm că puntea e pornită.
+      const fromPhone = params.has("tel");
+      const semnal = await readSignal(!fromPhone);
+      const laptop = params.has("laptop") ? await laptopAway() : undefined;
+      return NextResponse.json({ semnal, ...(laptop !== undefined ? { laptop } : {}) }, { headers: { "Cache-Control": "no-store" } });
     }
     return NextResponse.json({ cereri: await listCereri() }, { headers: { "Cache-Control": "no-store" } });
   } catch (caught) {
@@ -63,7 +67,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, id: cerere.id });
     }
     const cerere = await addCerere(titlu, text, confirmed);
-    return NextResponse.json({ ok: true, id: cerere.id });
+    // Dacă laptopul pare oprit, Argus îi spune lui Daniel că cererea așteaptă până pornește.
+    const away = await laptopAway();
+    const laptop = away === null ? undefined : `Laptopul nu mai răspunde de ${awayText(away)}. Cererea așteaptă și pornește singură când laptopul revine. Spune-i asta lui Daniel.`;
+    return NextResponse.json({ ok: true, id: cerere.id, ...(laptop ? { laptop } : {}) });
   } catch (caught) {
     return failure(caught);
   }

@@ -68,6 +68,12 @@ function spokenPart(text: string): { body: string; closed: boolean } | null {
   return { body: partialTag >= 0 ? rest.slice(0, partialTag) : rest, closed: false };
 }
 
+function awayText(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} ore`;
+  return `${Math.round(minutes / 1440)} zile`;
+}
+
 // Unde se termină ultima propoziție completă (după . ! ? urmat de spațiu).
 function lastSentenceEnd(text: string): number {
   let cut = 0;
@@ -768,6 +774,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       seen = new Date().toISOString();
     }
     let lastSignal = "";
+    let polls = 0;
     let open = false; // o cerere e în lucru pe laptop: verificăm des, ca rezultatul să apară imediat
     let timer: ReturnType<typeof setTimeout> | undefined;
     function schedule() {
@@ -781,9 +788,12 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     async function poll() {
       if (stopped || document.hidden) return;
       try {
-        const response = await fetch("/api/cereri?semnal=1&tel=1", { cache: "no-store" });
+        // O dată pe minut întrebăm și dacă laptopul e pornit.
+        const withLaptop = polls++ % 4 === 0;
+        const response = await fetch(`/api/cereri?semnal=1&tel=1${withLaptop ? "&laptop=1" : ""}`, { cache: "no-store" });
         if (response.ok) {
-          const { semnal } = (await response.json()) as { semnal?: string };
+          const { semnal, laptop } = (await response.json()) as { semnal?: string; laptop?: number | null };
+          if (withLaptop) setLaptopOff(typeof laptop === "number" ? laptop : null);
           if (semnal && semnal === lastSignal) return;
           lastSignal = semnal ?? "";
         }
@@ -990,6 +1000,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   }
   const [projects, setProjects] = useState<Cerere[]>([]);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  // De câte minute nu mai răspunde laptopul (null = pornit).
+  const [laptopOff, setLaptopOff] = useState<number | null>(null);
   const [fastOn, setFastOn] = useState(false);
   const [fastStatus, setFastStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
@@ -1424,7 +1436,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     await say(greetingFor(spokenLanguage()));
     historyRef.current = await memory;
     cleanRef.current = true;
-    // Ce a venit cât a fost „nu mă deranja”: se arată și se spune o singură dată, după salut.
+    // Ce a venit cât a fost „nu mă deranja” (sau ce a notat serverul noaptea): se arată și se spune o singură dată, după salut.
     void fetch("/api/nu-deranja", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { amanate?: { titlu: string; text: string }[] } | null) => {
@@ -1433,14 +1445,14 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
-          title: "Cât ai avut liniște",
+          title: "Între timp",
           text: held.map((item) => `${item.titlu}: ${item.text}`).join("\n"),
         });
         const titles = held.slice(0, 3).map((item) => item.titlu).join("; ");
         void report(
           spokenLanguage() === "ro"
-            ? `Cât ai avut liniște au venit ${held.length === 1 ? "un lucru" : `${held.length} lucruri`}: ${titles}.`
-            : `While you were on do not disturb, ${held.length} things came in: ${titles}.`,
+            ? `Între timp ${held.length === 1 ? "a venit un lucru" : `au venit ${held.length} lucruri`}: ${titles}.`
+            : `While you were away, ${held.length} things came in: ${titles}.`,
         );
       })
       .catch(() => {});
@@ -1720,6 +1732,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         </div>
         <button className="work-toggle" onClick={openProjects} aria-expanded={projectsOpen}>
           Lucrări{activeProjects ? ` · ${activeProjects}` : ""}
+          {laptopOff !== null && <span className="laptop-off"> · laptop oprit</span>}
         </button>
         <button className="car-toggle" onClick={toggleDriving} aria-pressed={driving}>
           Mașină
@@ -1991,6 +2004,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             <h2>Lucrări</h2>
             <button onClick={() => setProjectsOpen(false)}>Închide</button>
           </div>
+          {laptopOff !== null && (
+            <p className="laptop-warning">
+              Laptopul nu mai răspunde de {awayText(laptopOff)}. Cererile noi așteaptă și pornesc singure când revine.
+            </p>
+          )}
           {projects.length === 0 ? (
             <p className="projects-empty">Încă nimic. Cere-i lui Argus un proiect („fă-mi o prezentare despre…”) și îl vezi aici cât lucrează.</p>
           ) : (
