@@ -31,6 +31,7 @@ import {
   voiceCheckDone,
   splitReply,
   stopSpeaking,
+  watchVoice,
   type Language,
 } from "./voice";
 
@@ -153,6 +154,8 @@ const WAKE_KEY = "argus-trezire";
 const STANDBY_MS = 60 * 60_000;
 // Brief-ul de dimineață din oficiu: prima deschidere dintre 5 și 11, o dată pe zi.
 const BRIEF_KEY = "argus-brief-auto";
+// Întreruperea cu vocea (în test): cât vorbește Argus, dacă Daniel începe să vorbească, Argus tace și ascultă.
+const BARGE_KEY = "argus-intrerupe";
 const BRIEF_DAY_KEY = "argus-brief-zi";
 
 function briefDue(): boolean {
@@ -320,6 +323,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       wakeWordRef.current = localStorage.getItem(WAKE_KEY) === "1";
       setWakeWord(wakeWordRef.current);
       setBriefAuto(localStorage.getItem(BRIEF_KEY) === "1");
+      setBargeIn(localStorage.getItem(BARGE_KEY) === "1");
     } catch {
       // implicit oprit
     }
@@ -949,6 +953,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [standby, setStandby] = useState(false);
   const [wakeWord, setWakeWord] = useState(false);
   const [briefAuto, setBriefAuto] = useState(false);
+  const [bargeIn, setBargeIn] = useState(false);
   const wakeWordRef = useRef(false);
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
@@ -1649,6 +1654,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
 
   const toggleRef = useRef(() => {});
   toggleRef.current = toggle;
+  // Cât vorbește, îl poți opri vorbind (dacă e pornit în Setări).
+  useEffect(() => {
+    if (!bargeIn || phase !== "speaking") return;
+    return watchVoice(() => {
+      if (phaseRef.current === "speaking") toggleRef.current();
+    });
+  }, [bargeIn, phase]);
   function toggle() {
     if (phaseRef.current === "idle") void begin();
     else if (phaseRef.current === "speaking") {
@@ -1823,6 +1835,29 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
                 title="În modul mașină, după ce tace, Argus așteaptă să-l strigi pe nume (cel mult o oră). Tot ce se aude în mașină trece prin transcriere."
               >
                 {wakeWord ? "Pornit" : "Oprit"}
+              </button>
+            </dd>
+          </div>
+          <div>
+            <dt>Întrerupe vorbind</dt>
+            <dd>
+              <button
+                type="button"
+                className="voice"
+                onClick={() => {
+                  const next = !bargeIn;
+                  try {
+                    if (next) localStorage.setItem(BARGE_KEY, "1");
+                    else localStorage.removeItem(BARGE_KEY);
+                  } catch {
+                    // fără memorare
+                  }
+                  setBargeIn(next);
+                }}
+                aria-pressed={bargeIn}
+                title="În test: cât vorbește Argus, dacă începi să vorbești, el tace și te ascultă. Dacă se oprește singur din cauza propriei voci, oprește-l."
+              >
+                {bargeIn ? "Pornit (test)" : "Oprit"}
               </button>
             </dd>
           </div>

@@ -504,6 +504,52 @@ export async function openMic(): Promise<string | undefined> {
   }
 }
 
+// „Întrerupe-l vorbind”: cât vorbește Argus, ascultăm doar nivelul sunetului. Prima jumătate de secundă învățăm
+// cât din vocea lui se aude în microfon (ecoul rămas), apoi o voce clar mai tare, ținută ~0,4 s, îl oprește.
+export function watchVoice(onVoice: () => void): () => void {
+  const ctx = audio();
+  const stream = micStream;
+  if (!ctx || !stream?.active) return () => {};
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  const input = ctx.createMediaStreamSource(stream);
+  input.connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  const startedAt = performance.now();
+  let floor = 0;
+  let floorSamples = 0;
+  let loud = 0;
+  let done = false;
+  const timer = setInterval(() => {
+    if (ctx.state !== "running") return;
+    analyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (const value of samples) sum += value * value;
+    const rms = Math.sqrt(sum / samples.length);
+    if (performance.now() - startedAt < 500) {
+      floor = Math.max(floor, (floor * floorSamples + rms) / (floorSamples + 1));
+      floorSamples += 1;
+      return;
+    }
+    if (rms > Math.max(0.035, floor * 3)) loud += 1;
+    else loud = Math.max(0, loud - 1);
+    if (loud >= 8 && !done) {
+      done = true;
+      stop();
+      onVoice();
+    }
+  }, 50);
+  function stop() {
+    clearInterval(timer);
+    try {
+      input.disconnect();
+    } catch {
+      // deja oprit
+    }
+  }
+  return stop;
+}
+
 export function closeMic() {
   micStream?.getTracks().forEach((track) => track.stop());
   micStream = null;
