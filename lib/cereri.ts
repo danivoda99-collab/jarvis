@@ -108,8 +108,36 @@ export async function saveIfStatus(cerere: Cerere, expected: Status): Promise<bo
   return result === 1;
 }
 
-export async function readSignal(): Promise<string> {
+// Laptopul citește semnalul la câteva secunde; tot atunci notăm că e pornit, în aceeași comandă Redis.
+const LAPTOP = "argus:laptop";
+const BEAT = `redis.call('SET', KEYS[2], ARGV[1], 'EX', 604800)
+return redis.call('GET', KEYS[1])`;
+
+export async function readSignal(fromLaptop = false): Promise<string> {
+  if (fromLaptop) {
+    try {
+      return String((await command<string | null>("EVAL", BEAT, 2, SIGNAL, LAPTOP, new Date().toISOString())) ?? "0");
+    } catch {
+      // Fără scripturi, semnalul merge mai departe ca înainte; doar starea laptopului nu se mai vede.
+    }
+  }
   return String((await command<string | null>("GET", SIGNAL)) ?? "0");
+}
+
+// De câte minute nu s-a mai auzit laptopul (null = merge sau nu știm încă).
+export const LAPTOP_AWAY_MIN = 3;
+export async function laptopAway(): Promise<number | null> {
+  const seen = await command<string | null>("GET", LAPTOP).catch(() => null);
+  const time = seen ? Date.parse(seen) : NaN;
+  if (Number.isNaN(time)) return null;
+  const minutes = Math.floor((Date.now() - time) / 60_000);
+  return minutes >= LAPTOP_AWAY_MIN ? minutes : null;
+}
+
+export function awayText(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} ore`;
+  return `${Math.round(minutes / 1440)} zile`;
 }
 
 // Cu `confirmare`, Daniel a apăsat deja Da pe telefon (de exemplu la un mesaj), deci laptopul doar execută.

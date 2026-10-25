@@ -62,11 +62,16 @@ export async function markOpen() {
 }
 
 // Nu aruncă niciodată: o notificare ratată nu trebuie să strice cererea.
+// Fără sunet: Daniel o aude data viitoare când deschide Argus.
+export async function hold(title: string, body: string) {
+  await command("LPUSH", HELD, JSON.stringify({ titlu: title.slice(0, 120), text: body.slice(0, 240) }));
+  await command("LTRIM", HELD, 0, 19);
+}
+
 export async function notify(title: string, body: string, tag?: string, urgent = false) {
   try {
     if (!urgent && (await command<string | null>("GET", QUIET))) {
-      await command("LPUSH", HELD, JSON.stringify({ titlu: title.slice(0, 120), text: body.slice(0, 240) }));
-      await command("LTRIM", HELD, 0, 19);
+      await hold(title, body);
       return;
     }
     if (await command<string | null>("GET", OPEN)) return;

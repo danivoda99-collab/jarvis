@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { command } from "@/lib/cereri";
+import { awayText, command, laptopAway } from "@/lib/cereri";
+import { hold } from "@/lib/push";
 import { addFapt, listFapte, listJurnal } from "@/lib/memorie";
 
 // Noaptea, Argus își recitește jurnalul și își notează ce a învățat despre Daniel (Vercel Cron, o dată pe zi).
@@ -19,6 +20,11 @@ export async function GET(request: Request) {
   try {
     if (!(await command<string | null>("SET", LOCK, new Date().toISOString(), "NX", "EX", 20 * 60 * 60))) {
       return NextResponse.json({ ok: true, sarit: "a rulat deja azi" });
+    }
+    // Laptopul oprit de peste o oră: Daniel află când deschide Argus dimineață, fără o notificare la 4 noaptea.
+    const away = await laptopAway();
+    if (away !== null && away >= 60) {
+      await hold("Laptopul Argus e oprit", `Nu mai răspunde de ${awayText(away)}. Verifică dacă e la încărcat și pornit.`).catch(() => undefined);
     }
     const [jurnal, fapte] = await Promise.all([listJurnal(120), listFapte()]);
     if (!jurnal.length) return NextResponse.json({ ok: true, noi: 0 });
