@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { GoogleError, google, todayInBucharest } from "@/lib/google";
+import { SHEET, situation } from "@/lib/buget";
 
-// Sheet-ul „Buget personal” al lui Daniel. Scriem doar coloanele A:D din Cheltuieli;
-// coloana E (Luna) e o formulă ARRAYFORMULA și nu trebuie atinsă.
-const SHEET = "https://sheets.googleapis.com/v4/spreadsheets/18aCKEXM5g2cSpyjZVp8lPwnunvMEwTdX4MJhK44OMW0";
+// Scriem doar coloanele A:D din Cheltuieli; coloana E (Luna) e o formulă ARRAYFORMULA și nu trebuie atinsă.
 
 function failure(caught: unknown) {
   const message = caught instanceof GoogleError ? caught.message : "Nu am putut ajunge la Sheet-ul de buget.";
@@ -14,21 +13,6 @@ function failure(caught: unknown) {
 async function categories(): Promise<string[]> {
   const data = await google<{ values?: string[][] }>(`${SHEET}/values/${encodeURIComponent("Categorii!A2:A26")}`);
   return (data.values ?? []).map((row) => row[0]?.trim()).filter(Boolean);
-}
-
-// Situația lunii din tabul „Buget vs. cheltuit” (luna e în B1, implicit cea curentă).
-async function situation() {
-  const data = await google<{ values?: string[][] }>(
-    `${SHEET}/values/${encodeURIComponent("'Buget vs. cheltuit'!A1:E40")}`,
-  );
-  const rows = data.values ?? [];
-  const month = rows[0]?.[1] ?? "";
-  const header = ["Categorie", "Buget", "Cheltuit", "Rămas", "%"];
-  const body = rows
-    .slice(3)
-    .filter((row) => row[0] && (row[0] === "Total" || row[1] !== "0" || row[2] !== "0"))
-    .map((row) => [row[0], row[1] ?? "", row[2] ?? "", row[3] ?? "", row[4] ?? ""]);
-  return { luna: month, tabel: [header, ...body] };
 }
 
 // Categoriile permise, din tabul Categorii; cu ?situatie=1, situația lunii.

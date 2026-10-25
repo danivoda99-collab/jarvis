@@ -69,6 +69,24 @@ function spokenPart(text: string): { body: string; closed: boolean } | null {
   return { body: partialTag >= 0 ? rest.slice(0, partialTag) : rest, closed: false };
 }
 
+type Panou = {
+  intalnire: { titlu: string; inceput: string } | null;
+  buget: { procent: number; ramas: number } | null;
+  sarcini: { ramase: number; azi: number } | null;
+  echipa: { raportat: number; total: number; subTel?: number; analize?: number; tel?: number; actualizat: string } | null;
+};
+
+// „13:00”, „mâine 09:30” sau „joi 10:00”, după cât de departe e întâlnirea.
+function meetingWhen(iso: string): string {
+  const zone = { timeZone: "Europe/Bucharest" } as const;
+  const day = (date: Date) => date.toLocaleDateString("en-CA", zone);
+  const start = new Date(iso);
+  const time = start.toLocaleTimeString("ro-RO", { ...zone, hour: "2-digit", minute: "2-digit" });
+  if (day(start) === day(new Date())) return time;
+  if (day(start) === day(new Date(Date.now() + 86_400_000))) return `mâine ${time}`;
+  return `${start.toLocaleDateString("ro-RO", { ...zone, weekday: "short" })} ${time}`;
+}
+
 function awayText(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
   if (minutes < 48 * 60) return `${Math.round(minutes / 60)} ore`;
@@ -1027,6 +1045,28 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [projectsOpen, setProjectsOpen] = useState(false);
   // De câte minute nu mai răspunde laptopul (null = pornit).
   const [laptopOff, setLaptopOff] = useState<number | null>(null);
+  // Cifrele mici din jurul sferei; se reîmprospătează la 5 minute și când revii în aplicație.
+  const [panou, setPanou] = useState<Panou | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    const load = () => {
+      if (document.hidden) return;
+      fetch("/api/panou", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: Panou | null) => {
+          if (!stopped && data) setPanou(data);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, 5 * 60_000);
+    document.addEventListener("visibilitychange", load);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", load);
+    };
+  }, []);
   const [fastOn, setFastOn] = useState(false);
   const [fastStatus, setFastStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false); // pe telefon, panoul Sistem se deschide din „Setări”
@@ -1685,6 +1725,17 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     void ask(text);
   }
 
+  // O atingere pe o cifră întreabă detaliile: cu vocea dacă vorbiți deja, altfel în scris.
+  function askFromTile(text: string) {
+    if (phaseRef.current === "thinking") return;
+    if (phaseRef.current === "idle") silentRef.current = true;
+    stopListening();
+    stopSpeaking();
+    activeRef.current = true;
+    setError("");
+    void ask(text);
+  }
+
   function pickVoice(name: string) {
     chooseVoice(name);
     setVoiceName(name);
@@ -1948,6 +1999,21 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       </aside>
 
       <section className="center">
+        {panou && (
+          <div className="stats">
+            <button type="button" className="stat" onClick={() => askFromTile("Care e următoarea mea întâlnire? Pregătește-mă pe scurt.")} disabled={!panou.intalnire}>
+              <span className="stat-label">Următoarea</span>
+              <span className="stat-value">{panou.intalnire ? meetingWhen(panou.intalnire.inceput) : "liber"}</span>
+              <span className="stat-sub">{panou.intalnire?.titlu ?? "nimic în 2 zile"}</span>
+            </button>
+            <button type="button" className={`stat right${panou.buget && panou.buget.procent >= 90 ? " warn" : ""}`} onClick={() => askFromTile("Cum stau cu bugetul luna asta?")} disabled={!panou.buget}>
+              <span className="stat-label">Buget</span>
+              <span className="stat-value">{panou.buget ? `${panou.buget.procent}%` : "—"}</span>
+              <span className="stat-sub">{panou.buget ? `rămas ${panou.buget.ramas.toLocaleString("ro-RO")} lei` : "nu am acces"}</span>
+              {panou.buget && <span className="stat-bar"><i style={{ width: `${Math.min(100, panou.buget.procent)}%` }} /></span>}
+            </button>
+          </div>
+        )}
         {use2d ? (
           <Hud ref={hudRef} state={hudState} onToggle={toggle} label={connected ? "Oprește conversația" : "Pornește conversația"} />
         ) : (
@@ -1960,6 +2026,29 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             label={connected ? "Oprește conversația" : "Pornește conversația"}
             onUnsupported={() => setUse2d(true)}
           />
+        )}
+        {panou && (
+          <div className="stats">
+            <button type="button" className="stat" onClick={() => askFromTile("Cum stă echipa săptămâna asta?")} disabled={!panou.echipa}>
+              <span className="stat-label">Echipa</span>
+              <span className="stat-value">{panou.echipa ? `${panou.echipa.raportat}/${panou.echipa.total}` : "—"}</span>
+              <span className="stat-sub">
+                {panou.echipa
+                  ? panou.echipa.analize !== undefined && panou.echipa.tel
+                    ? `${panou.echipa.analize}/${panou.echipa.tel} analize`
+                    : "au raportat"
+                  : "vine diseară"}
+              </span>
+              {panou.echipa?.analize !== undefined && panou.echipa.tel ? (
+                <span className="stat-bar"><i style={{ width: `${Math.min(100, Math.round((panou.echipa.analize / panou.echipa.tel) * 100))}%` }} /></span>
+              ) : null}
+            </button>
+            <button type="button" className={`stat right${panou.sarcini && panou.sarcini.azi > 0 ? " warn" : ""}`} onClick={() => askFromTile("Ce sarcini am azi?")} disabled={!panou.sarcini}>
+              <span className="stat-label">Sarcini</span>
+              <span className="stat-value">{panou.sarcini ? panou.sarcini.ramase : "—"}</span>
+              <span className="stat-sub">{panou.sarcini ? (panou.sarcini.azi ? `${panou.sarcini.azi} pentru azi` : "nimic azi") : "nu am acces"}</span>
+            </button>
+          </div>
         )}
         <p className="status">{label}</p>
         {connected && (

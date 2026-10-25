@@ -553,6 +553,18 @@ async function runWarm(config, prompt, { kind = "work", resume, prep, gate, time
 
 // Un rând „VIZUAL: {...}” are graficele pentru telefon; se scoate din text și merge separat.
 // Rândul se scoate și când JSON-ul e stricat, ca să nu apară (sau să fie citit cu voce) pe telefon.
+// Rândul „PANOU: {…}” cu cifrele echipei pentru ecranul principal; restul textului merge mai departe neschimbat.
+function takePanel(text) {
+  const match = text.match(/^PANOU:.*$/m);
+  if (!match) return { text: null, rest: text };
+  const rest = (text.slice(0, match.index) + text.slice(match.index + match[0].length)).replace(/\n{3,}/g, "\n\n").trim();
+  try {
+    return { text: JSON.parse(match[0].replace(/^PANOU:\s*/, "")), rest };
+  } catch {
+    return { text: null, rest };
+  }
+}
+
 function splitVisual(text) {
   const match = text.match(/^VIZUAL:.*$/m);
   if (!match) return { text };
@@ -1049,6 +1061,7 @@ async function teamCoach(config) {
       "Raportarea e săptămânală (până sâmbătă la 17:00, cu rapoarte care se adună în timpul săptămânii), deci „n-a raportat azi” NU e o problemă și nu o spui. Vrei: cine e mult sub obiectivul săptămânii (Tel) față de cât a trecut din săptămână, după ce a raportat până acum, și cine a făcut ceva foarte bun (merită o vorbă bună). Vineri seara poți adăuga cine n-a trimis încă nimic săptămâna asta, ca reamintire blândă pentru sâmbătă. Cel mult 5 oameni, cei mai importanți întâi.",
       "Pentru fiecare, un mesaj scurt de la Daniel, pe WhatsApp, cald și direct, pe tonul lui (vezi memorie.md), fără reproșuri, cu o întrebare sau un pas concret (de exemplu „Salut Cornel! Cum merge săptămâna? Mai ai 3 analize până la Tel; pe cine suni mâine?”). Fără cifre de clienți și fără date despre clienți. Numele din „catre” e exact numele din WhatsApp, din contacte.md; dacă nu-l găsești acolo, scrii numele din echipă.",
       "Răspunsul: primul rând, o propoziție de cel mult 20 de cuvinte, bună de citit cu voce (de exemplu „Mihai e la jumătate din Tel; Ioana a făcut deja 3 analize; restul sunt pe drum.”). Apoi rândul VIZUAL cu „puncte”: titlu = numele, text = situația lui într-o frază scurtă, nivel = urgent (mult în urmă față de Tel), important (puțin în urmă) sau info (laudă), mesaj = {\"catre\": \"<nume WhatsApp>\", \"text\": \"<mesajul>\"}. După rândul VIZUAL nu mai scrii nimic. Dacă toți sunt pe drumul bun, primul rând spune asta, iar punctele sunt cel mult 2 laude.",
+      "Înainte de rândul VIZUAL, un rând cu cifrele pentru ecranul lui Daniel, doar numere, fără nume: PANOU: {\"raportat\": <câți au trimis cel puțin un raport săptămâna asta>, \"total\": <câți sunt în echipă>, \"subTel\": <câți sunt mult sub Tel>, \"analize\": <analizele echipei săptămâna asta>, \"tel\": <obiectivul de analize al echipei pe săptămână>}.",
     ].join("\n\n"),
   );
   if (!run.ok) {
@@ -1056,7 +1069,9 @@ async function teamCoach(config) {
     log("Rezumatul de seară n-a mers, reîncerc peste o oră.");
     return;
   }
-  const { text, vizual } = splitVisual(run.text);
+  const { text: panel, rest } = takePanel(run.text);
+  if (panel) await api(config, "POST", { echipa: panel }, "", "/api/panou").catch((error) => log("Cifrele echipei n-au ajuns pe ecran:", error.message));
+  const { text, vizual } = splitVisual(rest);
   await api(config, "POST", { titlu: "Echipa azi", cerere: "Rezumatul de seară al echipei", rezultat: text, vizual });
   state.facut = today.date;
   writeFileSync(COACH_FILE, JSON.stringify(state, null, 2));
