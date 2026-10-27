@@ -1910,3 +1910,28 @@ body {
 .stat.warn .stat-bar i {
   background: var(--flame);
 }
+
+/* „Gata” și „Mâine” sub o sarcină din reamintire */
+.viz-task-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.viz-task-later {
+  color: var(--ivory-muted);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.viz-point-send:disabled {
+  opacity: 0.5;
+}
+.viz-task-done {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--gold);
+}
+.viz-task-error {
+  font-size: 12px;
+  color: var(--flame);
+}
