@@ -644,17 +644,19 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     mail_deschide: (parameters: { id?: unknown }) => callApi(`/api/mail?id=${encodeURIComponent(asText(parameters.id))}`),
     contacte_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/contacte?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
     fisiere_cauta: (parameters: { cauta?: unknown }) => callApi(`/api/fisiere?cauta=${encodeURIComponent(asText(parameters.cauta))}`),
-    spotify: (parameters: { actiune?: unknown; ce?: unknown; tip?: unknown; valoare?: unknown }) => {
+    spotify: async (parameters: { actiune?: unknown; ce?: unknown; tip?: unknown; valoare?: unknown }) => {
+      const action = asText(parameters.actiune);
+      if (action === "ce_canta") return callApi("/api/spotify");
       // Daniel a cerut ceva anume de la muzică: nu o mai pornim singuri la final.
-      if (asText(parameters.actiune) !== "ce_canta") musicPausedRef.current = false;
-      return asText(parameters.actiune) === "ce_canta"
-        ? callApi("/api/spotify")
-        : callApi("/api/spotify", "POST", {
-            actiune: asText(parameters.actiune),
-            ce: asText(parameters.ce),
-            tip: asText(parameters.tip) || undefined,
-            valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
-          });
+      musicPausedRef.current = false;
+      const raw = await callApi("/api/spotify", "POST", {
+        actiune: action,
+        ce: asText(parameters.ce),
+        tip: asText(parameters.tip) || undefined,
+        valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
+      });
+      if (action === "pune" && !raw.startsWith("Eroare")) musicOnRef.current = true;
+      return raw;
     },
     nu_deranja: async (parameters: { minute?: unknown }) => {
       const raw = await callApi("/api/nu-deranja", "POST", { minute: Number(parameters.minute) || 0 });
@@ -976,6 +978,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const wakeWordRef = useRef(false);
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
+  const musicOnRef = useRef(false); // în runda asta Argus a pornit muzica
   const morningRef = useRef(false); // pornit cu ?dimineata=1: muzica se oprește cât vorbește cu Argus
   const [morningMusic, setMorningMusic] = useState("");
   // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
@@ -1501,6 +1504,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       // Mod scris: fără microfon după răspuns; conversația rămâne pentru următorul mesaj.
       activeRef.current = false;
       setPhase("idle");
+      return;
+    }
+    // Pe iPhone, Spotify ia sunetul și microfonul paginii: după „pune muzică” conversația se închide,
+    // iar o atingere o pornește din nou, curat. În mașină rămâne cum era (așteaptă „Argus”).
+    if (musicOnRef.current && !drivingRef.current) {
+      musicOnRef.current = false;
+      end();
       return;
     }
     quietRef.current = 0;

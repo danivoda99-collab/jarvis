@@ -197,6 +197,12 @@ function audio(): AudioContext | null {
 
 // Pe iPhone vocea pornește doar după o atingere: o deblocăm la prima atingere.
 export function primeSpeech() {
+  // Altă aplicație (Spotify, un apel) a luat sunetul: pe iPhone contextul vechi rămâne „interrupted” și nu mai cântă.
+  // La atingere facem unul nou, care pornește sigur.
+  if (context && (context.state as string) !== "running" && (context.state as string) !== "suspended") {
+    void context.close().catch(() => {});
+    context = null;
+  }
   const ctx = audio();
   if (ctx && ctx.state !== "running") void ctx.resume();
   const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
@@ -492,7 +498,10 @@ let micStream: MediaStream | null = null;
 // Pornește microfonul o dată pe conversație, ca iPhone-ul să nu întrebe la fiecare frază.
 export async function openMic(): Promise<string | undefined> {
   if (!cloud) return undefined;
-  if (micStream?.active) return undefined;
+  const track = micStream?.getAudioTracks()[0];
+  if (micStream?.active && track?.readyState === "live" && !track.muted) return undefined;
+  // Microfonul vechi a fost luat de altă aplicație (Spotify, un apel): îl închidem și cerem unul nou.
+  if (micStream) closeMic();
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
