@@ -15,6 +15,7 @@ import {
   chosenVoiceName,
   chooseFastHearing,
   closeMic,
+  releaseAudio,
   fastHearing,
   fastHearingStatus,
   englishVoices,
@@ -393,7 +394,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
 
   function addCard(card: Card) {
     setCards((previous) => [...previous.filter((item) => item.kind === "confirm"), card].slice(-4));
-    blipSound();
+    // Pe iPhone orice sunet al paginii oprește Spotify: semnalul se aude doar în conversație.
+    if (activeRef.current) blipSound();
   }
 
   function closeCard(id: string) {
@@ -435,7 +437,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
       });
-      const data = (await response.json()) as { ok?: boolean; error?: string };
+      const data = (await response.json()) as { ok?: boolean; error?: string; deschide?: string; piesa?: string };
+      if (path === "/api/spotify" && data.deschide) lastSpotifyOpenRef.current = { uri: data.deschide, piesa: data.piesa };
       if (!response.ok) return `Eroare: ${data.error ?? response.status}`;
       return data.ok && Object.keys(data).length === 1 ? "Gata, făcut." : JSON.stringify(data);
     } catch {
@@ -656,6 +659,16 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
       });
       if (action === "pune" && !raw.startsWith("Eroare")) musicOnRef.current = true;
+      if (action === "pune" && lastSpotifyOpenRef.current) {
+        // Spotify „adormit” pe iPhone: îl deschidem direct pe ce s-a cerut; conversația se închide după răspuns.
+        const { uri, piesa } = lastSpotifyOpenRef.current;
+        lastSpotifyOpenRef.current = null;
+        musicOnRef.current = true;
+        setTimeout(() => {
+          window.location.href = uri;
+        }, 1500);
+        return `Deschid Spotify pe telefon${piesa ? ` cu ${piesa}` : ""}. Spune-i lui Daniel doar asta, scurt.`;
+      }
       return raw;
     },
     nu_deranja: async (parameters: { minute?: unknown }) => {
@@ -979,6 +992,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
   const musicOnRef = useRef(false); // în runda asta Argus a pornit muzica
+  const lastSpotifyOpenRef = useRef<{ uri: string; piesa?: string } | null>(null); // Spotify adormit: ce deschidem direct
   const morningRef = useRef(false); // pornit cu ?dimineata=1: muzica se oprește cât vorbește cu Argus
   const [morningMusic, setMorningMusic] = useState("");
   // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
@@ -1019,8 +1033,10 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           body: JSON.stringify(ce ? { actiune: "pune", ce, tip: "playlist" } : { actiune: "pune" }),
         })
           .then((response) => response.json().catch(() => null))
-          .then((data: { error?: string } | null) => {
-            if (data?.error) log("agent", data.error);
+          .then((data: { error?: string; deschide?: string } | null) => {
+            // Spotify „adormit” pe iPhone: îl deschidem direct pe playlist.
+            if (data?.deschide) window.location.href = data.deschide;
+            else if (data?.error) log("agent", data.error);
           })
           .catch(() => {});
       } else {
@@ -1520,6 +1536,12 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
 
   async function begin() {
     setError("");
+    // Cât vorbește cu Argus, muzica ia pauză și pornește la loc la final. Cerem pauza înainte de microfon:
+    // pe iPhone microfonul o oprește oricum, iar după aceea Spotify n-ar mai ști că a cântat.
+    if (spotifyConnected) {
+      musicPausedRef.current = false;
+      pauseMusic();
+    }
     primeSpeech();
     const micError = await openMic();
     if (micError) {
@@ -1532,10 +1554,6 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     }
     activeRef.current = true;
     silentRef.current = false;
-    if ((drivingRef.current || morningRef.current) && spotifyConnected) {
-      musicPausedRef.current = false;
-      pauseMusic();
-    }
     // Memoria vine cât Argus salută, nu înainte.
     const memory = fetchMemory();
     quietRef.current = 0;
@@ -1624,6 +1642,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     stopListening();
     stopSpeaking();
     closeMic();
+    releaseAudio();
     setHeard("");
     setPhase("idle");
     // O confirmare rămasă deschisă când se închide conversația nu mai poate aproba nimic.

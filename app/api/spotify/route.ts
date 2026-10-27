@@ -6,6 +6,8 @@ type Device = { id: string; name: string; type: string; is_active: boolean };
 type Item = { name: string; uri: string; artists?: { name: string }[]; owner?: { display_name?: string } };
 type Playing = { is_playing: boolean; item?: Item; device?: Device };
 
+const NO_DEVICE = "Nu văd niciun dispozitiv";
+
 const TYPES = { melodie: "track", playlist: "playlist", artist: "artist", album: "album" } as const;
 
 function describe(item?: Item) {
@@ -25,7 +27,7 @@ async function onDevice(call: SpotifyCall, path: string, init: RequestInit): Pro
     // Cel mai des: pe telefon e alt cont Spotify decât cel conectat la Argus. Spunem care e cel conectat.
     const { data: me } = await call<{ display_name?: string; id?: string }>("/me");
     const who = me?.display_name || me?.id;
-    return `Nu văd niciun dispozitiv cu Spotify pornit${who ? ` pe contul „${who}”` : ""}. Deschide Spotify pe telefon, cu același cont, pune ceva câteva secunde și încearcă din nou.`;
+    return `${NO_DEVICE} cu Spotify pornit${who ? ` pe contul „${who}”` : ""}. Deschide Spotify pe telefon, cu același cont, pune ceva câteva secunde și încearcă din nou.`;
   }
   const separator = path.includes("?") ? "&" : "?";
   result = await call(`${path}${separator}device_id=${encodeURIComponent(device.id)}`, init);
@@ -58,6 +60,8 @@ export async function POST(request: Request) {
       if (!query) {
         error = await onDevice(call, "/me/player/play", { method: "PUT" });
         text = "Am pornit muzica.";
+        // iPhone-ul a „adormit” Spotify: telefonul îl deschide direct, de unde a rămas.
+        if (error?.startsWith(NO_DEVICE)) return NextResponse.json({ error, deschide: "spotify:" }, { status: 502 });
       } else {
         const type = TYPES[(body.tip as keyof typeof TYPES) ?? "melodie"] ?? "track";
         const { data } = await call<Record<string, { items: (Item | null)[] }>>(
@@ -68,6 +72,10 @@ export async function POST(request: Request) {
         const payload = type === "track" ? { uris: [found.uri] } : { context_uri: found.uri };
         error = await onDevice(call, "/me/player/play", { method: "PUT", body: JSON.stringify(payload) });
         text = `Pun ${describe(found)}.`;
+        // iPhone-ul a „adormit” Spotify: telefonul deschide Spotify direct pe ce s-a cerut.
+        if (error?.startsWith(NO_DEVICE)) {
+          return NextResponse.json({ error, deschide: found.uri, piesa: describe(found) }, { status: 502 });
+        }
       }
     } else if (action === "pauza_daca_canta") {
       // Modul mașină: muzica se oprește cât vorbești cu Argus și pornește la loc după.
