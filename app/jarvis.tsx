@@ -2014,6 +2014,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             </button>
           </div>
         )}
+        <div className="orb-slot">
         {use2d ? (
           <Hud ref={hudRef} state={hudState} onToggle={toggle} label={connected ? "Oprește conversația" : "Pornește conversația"} />
         ) : (
@@ -2027,6 +2028,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             onUnsupported={() => setUse2d(true)}
           />
         )}
+        </div>
         {panou && (
           <div className="stats">
             <button type="button" className="stat" onClick={() => askFromTile("Cum stă echipa săptămâna asta?")} disabled={!panou.echipa}>
@@ -2089,12 +2091,14 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           </button>
         )}
         {pushState === "denied" && <p className="hint">Notificările sunt oprite din setările telefonului.</p>}
+        <div className="connect-row">
         <a className={googleConnected ? "connect connect-quiet" : "connect"} href="/api/google/connect">
           {googleConnected ? "Reconectează Google" : "Conectează Google (agendă, to-do, buget)"}
         </a>
         <a className={spotifyConnected ? "connect connect-quiet" : "connect"} href="/api/spotify/connect">
           {spotifyConnected ? "Reconectează Spotify" : "Conectează Spotify (muzică)"}
         </a>
+        </div>
       </section>
 
       <aside className="panel panel-right">

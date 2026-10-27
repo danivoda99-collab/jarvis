@@ -1935,3 +1935,153 @@ body {
   font-size: 12px;
   color: var(--flame);
 }
+
+/* Totul încape pe ecran: pagina nu se mai derulează, sfera se micșorează cât e nevoie.
+   Derulare rămâne doar în ferestre (rezumate, tabele, grafice) și în jurnal. */
+html:has(.console),
+body:has(.console) {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.console {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.topbar {
+  min-width: 0;
+}
+
+.topbar .brand {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
+.topbar .brand-mark {
+  flex: none;
+}
+
+/* Telefoane: bara de sus se strânge puțin în loc să împingă ecranul în lateral. */
+@media (max-width: 430px) {
+  .topbar .settings-toggle,
+  .topbar .car-toggle,
+  .topbar .work-toggle {
+    margin-right: 6px;
+    padding: 6px 9px;
+    letter-spacing: 0.04em;
+  }
+
+  .topbar .brand {
+    gap: 6px;
+    letter-spacing: 0.2em;
+  }
+
+  .clock-time {
+    font-size: 18px;
+  }
+
+  .clock-date {
+    font-size: 11px;
+    max-width: 84px;
+    text-align: right;
+  }
+
+  /* „laptop oprit” nu mai lățește butonul: rămâne doar marginea portocalie. */
+  .topbar .work-toggle .laptop-off {
+    display: none;
+  }
+
+  .topbar .work-toggle:has(.laptop-off) {
+    border-color: var(--flame);
+    color: var(--flame);
+  }
+}
+
+@media (max-width: 360px) {
+  .topbar .brand-name {
+    display: none;
+  }
+}
+
+.center {
+  min-height: 0;
+  padding-top: 0;
+  gap: 10px;
+}
+
+.orb-slot {
+  flex: 1 1 0;
+  min-height: 140px;
+  width: 100%;
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+
+.orb-slot .orb {
+  width: min(86vw, 380px, 100cqh);
+}
+
+.orb-slot .hud {
+  width: min(78vw, 340px, 100cqh);
+}
+
+.connect-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.panel-right {
+  min-height: 0;
+  max-height: 18dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-right .log {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (min-width: 960px) {
+  .console {
+    grid-template-columns: 280px minmax(0, 1fr) 340px;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .orb-slot .orb {
+    width: min(68vh, 640px, 100cqh);
+  }
+
+  .panel-left.open,
+  .panel-left {
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  .panel-right {
+    max-height: 70dvh;
+  }
+}
+
+/* Cifrele intră puțin în colțurile goale ale sferei, ca sfera să rămână mare. */
+.center .stats {
+  position: relative;
+  z-index: 2;
+}
+
+.center .stats + .orb-slot {
+  margin-top: -44px;
+}
+
+.center .orb-slot + .stats {
+  margin-top: -44px;
+}
