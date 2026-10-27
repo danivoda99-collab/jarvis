@@ -1063,7 +1063,8 @@ body {
   opacity: 0.4;
   cursor: default;
 }
-.readout select.voice {
+.readout select.voice,
+.readout input.voice {
   max-width: 150px;
   font: inherit;
   font-size: 13px;
