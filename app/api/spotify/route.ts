@@ -21,7 +21,12 @@ async function onDevice(call: SpotifyCall, path: string, init: RequestInit): Pro
   const { data } = await call<{ devices: Device[] }>("/me/player/devices");
   const devices = data?.devices ?? [];
   const device = devices.find((item) => item.type === "Smartphone") ?? devices[0];
-  if (!device) return "Nu văd niciun dispozitiv cu Spotify pornit. Deschide o dată Spotify pe telefon și încearcă din nou.";
+  if (!device) {
+    // Cel mai des: pe telefon e alt cont Spotify decât cel conectat la Argus. Spunem care e cel conectat.
+    const { data: me } = await call<{ display_name?: string; id?: string }>("/me");
+    const who = me?.display_name || me?.id;
+    return `Nu văd niciun dispozitiv cu Spotify pornit${who ? ` pe contul „${who}”` : ""}. Deschide Spotify pe telefon, cu același cont, pune ceva câteva secunde și încearcă din nou.`;
+  }
   const separator = path.includes("?") ? "&" : "?";
   result = await call(`${path}${separator}device_id=${encodeURIComponent(device.id)}`, init);
   return result.status < 300 ? null : `Spotify a răspuns cu ${result.status}.`;
