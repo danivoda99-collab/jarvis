@@ -1155,7 +1155,7 @@ async function todoReminder(config) {
   log("Reamintirea sarcinilor a plecat pe telefon.");
 }
 
-// ——— Rezumatul serii („Ziua ta”): pornit doar cu „rezumatSeara”: true în config.json, la 21 (sau „rezumatOra”). ———
+// ——— Rezumatul serii („Ziua ta”): la 21 (sau „rezumatOra”), oprit cu „rezumatSeara”: false în config.json. ———
 const RECAP_FILE = join(HERE, "rezumat-seara.json");
 
 async function eveningRecap(config) {
@@ -1174,8 +1174,9 @@ async function eveningRecap(config) {
     [
       `Azi e ${today.date}, seara. Rezumatul zilei pentru Daniel, automat. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
       "Din Google Calendar: ce întâlniri a avut azi și prima întâlnire de mâine (ora, cu cine, unde). Cu un client OVB spui doar ora și „întâlnire cu un client”.",
+      "Raportările lui Daniel: dacă „node team-voda.mjs ping” (din folderul punții) răspunde ok, iei numele lui din „node team-voda.mjs call '{\"fn\":\"AR_mgLista\",\"args\":[\"Voda\",\"\"]}'” și rapoartele lui din săptămâna asta (sâmbătă–vineri) cu „node team-voda.mjs call '{\"fn\":\"AR_myReports\",\"args\":[\"<numele lui>\",\"\"]}'”. Compari întâlnirile cu clienți din agendă (PM-uri, analize, ședințe cu clienți) din zilele săptămânii de până azi cu ce a raportat: câte sunt în agendă, câte apar raportate. Doar numere și zile, fără nume de clienți. Doar citire: nu raportezi nimic.",
       `Sarcinile rămase pentru azi sau fără dată: ${open.map((task) => task.titlu).join("; ") || "niciuna"}.`,
-      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Ai avut 3 întâlniri azi; mâine începi la 9:30 cu Mihai.”). Apoi rândul VIZUAL cu „puncte”: prima întâlnire de mâine (nivel important), apoi cel mult 3 sarcini rămase (titlu = exact titlul sarcinii de mai sus, nivel info). După rândul VIZUAL nu mai scrii nimic.",
+      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Ai avut 3 întâlniri azi; mâine începi la 9:30 cu Mihai.”). Apoi rândul VIZUAL cu „puncte”: dacă are întâlniri cu clienți neraportate, un punct „De raportat” (text = câte și din ce zile, nivel urgent; dacă e totul raportat, „Raportările sunt la zi”, nivel info), apoi prima întâlnire de mâine (nivel important), apoi cel mult 3 sarcini rămase (titlu = exact titlul sarcinii de mai sus, nivel info). După rândul VIZUAL nu mai scrii nimic.",
     ].join("\n\n"),
   );
   if (!run.ok) {
@@ -1192,6 +1193,64 @@ async function eveningRecap(config) {
   state.facut = today.date;
   writeFileSync(RECAP_FILE, JSON.stringify(state, null, 2));
   log("Rezumatul serii a plecat pe telefon.");
+}
+
+// ——— Planul săptămânii: sâmbătă seara (implicit 19, „planOra”), ce urmează luni–vineri și ce să prioritizeze în golurile din agendă. ———
+const PLAN_FILE = join(HERE, "plan-saptamana.json");
+
+async function weeklyPlan(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const state = loadState(PLAN_FILE);
+  const from = Number.isInteger(config.planOra) ? config.planOra : 19;
+  if (today.weekday !== "Sat" || hour < from || hour >= 23 || state.facut === today.date) return;
+  if (Date.now() - (state.incercat || 0) < 30 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(PLAN_FILE, JSON.stringify(state, null, 2));
+  const { sarcini = [] } = await api(config, "GET", undefined, "", "/api/sarcini");
+  const until = new Date(Date.parse(today.date) + 7 * 86_400_000).toISOString().slice(0, 10);
+  const due = sarcini.filter((task) => !task.scadenta || task.scadenta <= until).slice(0, 20);
+  log("Fac planul săptămânii.");
+  const run = await runClaude(
+    config,
+    [
+      `Azi e sâmbătă, ${today.date}, seara. Planul săptămânii care vine (luni–vineri) pentru Daniel, automat. Doar citire: nu trimiți, nu scrii, nu muți și nu ștergi nimic.`,
+      "Din Google Calendar: ce are deja luni–vineri (zi, oră, cu cine; cu un client OVB doar „întâlnire cu un client”) și golurile mari (cel puțin 2 ore libere între 9 și 19).",
+      `To-do-urile scadente până ${until}, întârziate sau fără dată: ${due.map((task) => `${task.titlu}${task.scadenta ? ` (${task.scadenta})` : ""}`).join("; ") || "niciunul"}.`,
+      "Echipa: dacă „node team-voda.mjs ping” răspunde ok, din „node team-voda.mjs call '{\"fn\":\"AR_mgLista\",\"args\":[\"Voda\",\"\"]}'” vezi cine a fost mult sub Tel săptămâna asta (doar cifre agregate, fără clienți).",
+      "Prioritățile: ce ar trebui să pună Daniel în golurile libere, în ordinea importanței: to-do-urile întârziate sau cu termen, apoi timp de telefoane pentru programări, apoi o discuție scurtă cu cei din echipă rămași în urmă. Pentru fiecare, ziua și intervalul liber propus.",
+      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Săptămâna are 9 întâlniri; cele mai bune goluri sunt marți și joi dimineață.”). Apoi rândul VIZUAL cu „puncte”, cel mult 8: întâi prioritățile (titlu = ziua și intervalul, de exemplu „Marți 10–12”, text = ce să facă atunci, nivel important), apoi zilele aglomerate (titlu = ziua, text = câte întâlniri și prima oră, nivel info). După rândul VIZUAL nu mai scrii nimic.",
+    ].join("\n\n"),
+  );
+  if (!run.ok) {
+    noteLimit(run.text);
+    return;
+  }
+  const { text, vizual } = splitVisual(run.text);
+  await api(config, "POST", { titlu: "Planul săptămânii", cerere: "Planul săptămânii care vine", rezultat: text, vizual });
+  state.facut = today.date;
+  writeFileSync(PLAN_FILE, JSON.stringify(state, null, 2));
+  log("Planul săptămânii a plecat pe telefon.");
+}
+
+// ——— Ce a învățat Argus: pe 1 ale lunii, după 10, lista faptelor notate despre Daniel, ca să scoată ce nu e corect. ———
+const LEARNED_FILE = join(HERE, "ce-a-invatat.json");
+
+async function monthlyLearned(config) {
+  const today = bucharestDay();
+  const month = today.date.slice(0, 7);
+  const state = loadState(LEARNED_FILE);
+  if (!today.date.endsWith("-01") || bucharestHour() < 10 || state.facut === month) return;
+  state.facut = month;
+  writeFileSync(LEARNED_FILE, JSON.stringify(state, null, 2));
+  const { fapte = [] } = await api(config, "GET", undefined, "", "/api/memorie");
+  if (!fapte.length) return;
+  const rezultat = [
+    `Argus știe ${fapte.length === 1 ? "un lucru" : `${fapte.length} lucruri`} despre tine. Dacă ceva nu e corect, spune „Argus, uită că…”.`,
+    ...fapte.slice(0, 25).map((fapt) => `- ${fapt}`),
+  ].join("\n");
+  await api(config, "POST", { titlu: "Ce a învățat Argus", cerere: "Ce a învățat Argus luna asta", rezultat });
+  log("Lista „Ce a învățat Argus” a plecat pe telefon.");
 }
 
 function loadPreps() {
@@ -1306,7 +1365,9 @@ function runChores(config) {
     if (config.echipaSeara !== false) await teamCoach(config);
     if (config.brief !== false) await morningBrief(config);
     if (config.sarcini !== false) await todoReminder(config).catch((error) => log("Reamintirea sarcinilor n-a mers:", error.message));
-    if (config.rezumatSeara === true) await eveningRecap(config).catch((error) => log("Rezumatul serii n-a mers:", error.message));
+    if (config.rezumatSeara !== false) await eveningRecap(config).catch((error) => log("Rezumatul serii n-a mers:", error.message));
+    if (config.planSaptamana !== false) await weeklyPlan(config).catch((error) => log("Planul săptămânii n-a mers:", error.message));
+    if (config.ceAInvatat !== false) await monthlyLearned(config).catch((error) => log("„Ce a învățat Argus” n-a mers:", error.message));
   })()
     .catch((error) => log("Treburile automate n-au mers:", error.message))
     .finally(() => (chores = false));
