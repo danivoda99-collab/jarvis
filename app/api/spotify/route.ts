@@ -159,6 +159,14 @@ export async function POST(request: Request) {
           return NextResponse.json({ error, deschide: found.uri.startsWith("spotify:collection") ? "spotify:" : found.uri, piesa: describe(found) }, { status: 502 });
         }
       }
+    } else if (action === "reia") {
+      // După conversație: muzica pornește la loc; dacă iPhone-ul a adormit Spotify, mai încearcă câteva secunde, fără să-l deschidă.
+      error = await onDevice(call, "/me/player/play", { method: "PUT" });
+      if (error?.startsWith(NO_DEVICE)) {
+        playWhenAwake(call, null);
+        error = null;
+      }
+      text = "Am pornit muzica la loc.";
     } else if (action === "pauza_daca_canta") {
       // Modul mașină: muzica se oprește cât vorbești cu Argus și pornește la loc după.
       const { data } = await call<Playing>("/me/player");

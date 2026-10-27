@@ -1616,7 +1616,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   function resumeMusic() {
     if (!musicPausedRef.current) return;
     musicPausedRef.current = false;
-    void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pune" }) }).catch(() => {});
+    void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "reia" }) }).catch(() => {});
   }
 
   function enterStandby() {
@@ -1638,7 +1638,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     setStandby(false);
     if (musicPausedRef.current) {
       musicPausedRef.current = false;
-      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "pune" }) }).catch(() => {});
+      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "reia" }) }).catch(() => {});
     }
     activeRef.current = false;
     stopListening();
