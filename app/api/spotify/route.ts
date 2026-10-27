@@ -27,8 +27,9 @@ async function ownPlaylist(call: SpotifyCall, query: string, loose: boolean): Pr
     if (!data?.next) break;
   }
   const exact = lists.find((item) => plain(item.name) === wanted);
-  if (exact || !loose) return exact;
-  return lists.find((item) => plain(item.name).includes(wanted) || (wanted.length > 3 && wanted.includes(plain(item.name))));
+  if (exact) return exact;
+  // Numele playlistului conține ce a spus („chill” → „Chill seara”); invers doar când a cerut clar un playlist.
+  return lists.find((item) => (wanted.length > 2 && plain(item.name).includes(wanted)) || (loose && wanted.length > 3 && wanted.includes(plain(item.name))));
 }
 
 function describe(item?: Item) {

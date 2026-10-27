@@ -5,7 +5,7 @@ import { openToken, sealToken } from "@/lib/google";
 // Tokenul de reîmprospătare stă criptat într-un cookie, ca la Google.
 export const SPOTIFY_COOKIE = "argus_spotify";
 export const SPOTIFY_STATE = "argus_spotify_state";
-const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private user-library-read";
+const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative user-library-read";
 
 export const spotifyRedirect = (origin: string) => `${origin}/api/spotify/callback`;
 
