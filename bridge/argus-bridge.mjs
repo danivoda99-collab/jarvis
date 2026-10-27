@@ -1078,6 +1078,82 @@ async function teamCoach(config) {
   log("Rezumatul de seară a plecat pe telefon.");
 }
 
+// ——— Brief-ul de dimineață: la 10:00 (implicit, „briefOra” în config.json), luni–vineri, o dată pe zi, vine ca notificare. ———
+const BRIEF_FILE = join(HERE, "brief-dimineata.json");
+
+function loadState(file) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return { facut: "", incercat: 0 };
+  }
+}
+
+async function morningBrief(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const state = loadState(BRIEF_FILE);
+  const from = Number.isInteger(config.briefOra) ? config.briefOra : 10;
+  if (["Sat", "Sun"].includes(today.weekday) || hour < from || hour >= 14 || state.facut === today.date) return;
+  if (Date.now() - (state.incercat || 0) < 30 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(BRIEF_FILE, JSON.stringify(state, null, 2));
+  log("Fac brief-ul de dimineață.");
+  const run = await runClaude(
+    config,
+    [
+      `Azi e ${today.date}, dimineața. Brief-ul zilei pentru Daniel, automat; el nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
+      "Din Google Calendar: întâlnirile de azi (ora, cu cine, unde). Din Gmail: necititele cu eticheta „De făcut” și mailurile de la oameni reali din ultimele 24 de ore (nu reclame, nu notificări automate); un mail de la un client OVB îl numești doar „mail de la un client”, fără nume sau detalii. Sarcinile nu le pui, vin separat.",
+      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Azi ai 3 întâlniri, prima la 11 cu Mihai, și 2 mailuri care așteaptă răspuns.”). Apoi rândul VIZUAL cu „puncte”: întâi întâlnirile (titlu = ora și numele, text = cu cine și unde, nivel = important), apoi mailurile (titlu = expeditorul, text = ce vrea, nivel = important dacă cere un răspuns, altfel info). Cel mult 8 puncte. După rândul VIZUAL nu mai scrii nimic. Dacă ziua e liberă, primul rând spune asta.",
+    ].join("\n\n"),
+  );
+  if (!run.ok) {
+    noteLimit(run.text);
+    log("Brief-ul n-a mers, reîncerc peste 30 de minute.");
+    return;
+  }
+  const { text, vizual } = splitVisual(run.text);
+  await api(config, "POST", { titlu: "Brief-ul zilei", cerere: "Brief-ul de dimineață", rezultat: text, vizual });
+  state.facut = today.date;
+  writeFileSync(BRIEF_FILE, JSON.stringify(state, null, 2));
+  log("Brief-ul a plecat pe telefon.");
+}
+
+// ——— Reamintirea to-do-urilor: de două ori pe zi (implicit 10 și 17, „sarciniOre” în config.json), sarcinile rămase,
+// cu „Gata” și „Mâine” pe fiecare, pe telefon. Doar dacă e ceva scadent azi, întârziat sau fără dată. ———
+const TODO_FILE = join(HERE, "reamintire-sarcini.json");
+
+async function todoReminder(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const hours = Array.isArray(config.sarciniOre) && config.sarciniOre.length ? config.sarciniOre : [10, 17];
+  const slot = hours.filter((value) => Number.isInteger(value) && hour >= value && hour < value + 3).pop();
+  if (slot === undefined) return;
+  const key = `${today.date}@${slot}`;
+  const state = loadState(TODO_FILE);
+  if (state.facut === key || Date.now() - (state.incercat || 0) < 30 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(TODO_FILE, JSON.stringify(state, null, 2));
+  const { sarcini = [] } = await api(config, "GET", undefined, "", "/api/sarcini");
+  const dayMs = 86_400_000;
+  const late = (task) => Math.round((Date.parse(today.date) - Date.parse(task.scadenta)) / dayMs);
+  const due = sarcini.filter((task) => task.scadenta && task.scadenta <= today.date).sort((a, b) => a.scadenta.localeCompare(b.scadenta));
+  const undated = sarcini.filter((task) => !task.scadenta);
+  const picked = [...due, ...undated].slice(0, 8);
+  state.facut = key;
+  writeFileSync(TODO_FILE, JSON.stringify(state, null, 2));
+  if (!picked.length) return;
+  const puncte = picked.map((task) => {
+    const days = task.scadenta ? late(task) : null;
+    const when = days === null ? "Fără dată" : days === 0 ? "Azi" : days === 1 ? "De ieri" : `Întârziată de ${days} zile`;
+    return { titlu: task.titlu.slice(0, 40), text: when, nivel: days === null ? "info" : days > 0 ? "urgent" : "important", sarcina: task.id };
+  });
+  const lateCount = due.filter((task) => late(task) > 0).length;
+  const first = `Ai ${picked.length === 1 ? "o sarcină rămasă" : `${picked.length} sarcini rămase`}${lateCount ? `, ${lateCount} întârziate` : ""}. Bifează ce ai făcut sau amână pe mâine.`;
+  await api(config, "POST", { titlu: "De făcut", cerere: "Reamintirea to-do-urilor", rezultat: first, vizual: { puncte } });
+  log("Reamintirea sarcinilor a plecat pe telefon.");
+}
+
 function loadPreps() {
   try {
     return JSON.parse(readFileSync(PREP_FILE, "utf8"));
@@ -1188,6 +1264,8 @@ function runChores(config) {
     if (config.alerte !== false) await checkAlerts(config);
     if (config.raportLuni !== false) await weeklyReport(config);
     if (config.echipaSeara !== false) await teamCoach(config);
+    if (config.brief !== false) await morningBrief(config);
+    if (config.sarcini !== false) await todoReminder(config).catch((error) => log("Reamintirea sarcinilor n-a mers:", error.message));
   })()
     .catch((error) => log("Treburile automate n-au mers:", error.message))
     .finally(() => (chores = false));

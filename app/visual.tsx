@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Vizual } from "@/lib/vizual";
 
 // Cifre mari, bare de progres, grafice și imagini în ferestre, în culorile sferei.
@@ -9,6 +10,39 @@ const format = (value: number) =>
   Math.abs(value) >= 1000 ? Math.round(value).toLocaleString("ro-RO") : String(Math.round(value * 10) / 10).replace(".", ",");
 
 const NIVEL = { urgent: "Urgent", important: "De răspuns", info: "Info" } as const;
+
+// Mâine, în fusul orar al lui Daniel (Google Tasks ține doar data).
+function tomorrow() {
+  const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest" }).format(new Date(Date.now() + 86_400_000));
+  return date.slice(0, 10);
+}
+
+// „Gata” bifează sarcina, „Mâine” o mută pe mâine; o singură atingere, fără întrebări în plus.
+function TaskActions({ id }: { id: string }) {
+  const [state, setState] = useState<"" | "lucru" | "gata" | "maine" | "eroare">("");
+  const act = async (done: boolean) => {
+    setState("lucru");
+    const response = await fetch("/api/sarcini", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(done ? { id } : { id, scadenta: tomorrow() }),
+    }).catch(() => null);
+    setState(response?.ok ? (done ? "gata" : "maine") : "eroare");
+  };
+  if (state === "gata") return <span className="viz-task-done">Bifată ✓</span>;
+  if (state === "maine") return <span className="viz-task-done">Mutată pe mâine</span>;
+  return (
+    <div className="viz-task-actions">
+      <button className="viz-point-send" disabled={state === "lucru"} onClick={() => void act(true)}>
+        Gata
+      </button>
+      <button className="viz-point-send viz-task-later" disabled={state === "lucru"} onClick={() => void act(false)}>
+        Mâine
+      </button>
+      {state === "eroare" && <span className="viz-task-error">N-a mers, mai încearcă.</span>}
+    </div>
+  );
+}
 
 function Points({ items }: { items: NonNullable<Vizual["puncte"]> }) {
   return (
@@ -22,6 +56,7 @@ function Points({ items }: { items: NonNullable<Vizual["puncte"]> }) {
               {item.nivel !== "info" && <span className="viz-point-tag">{NIVEL[item.nivel]}</span>}
             </div>
             {item.text && <span className="viz-point-text">{item.text}</span>}
+            {item.sarcina && <TaskActions id={item.sarcina} />}
             {item.mesaj && (
               <div className="viz-point-draft">
                 <span className="viz-point-draft-text">„{item.mesaj.text}”</span>

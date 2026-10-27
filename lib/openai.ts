@@ -7,6 +7,17 @@ export const OPENAI_VOICES = ["cedar", "marin", "ash", "echo", "onyx", "ballad",
 export const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
 // Auzul instant folosește același model ca auzul normal (mai precis în română); se poate schimba din Vercel.
 export const REALTIME_STT_MODEL = process.env.OPENAI_REALTIME_STT_MODEL || "gpt-4o-transcribe";
+// Vocile ElevenLabs (mai fluide în română); apar în listă doar dacă ELEVENLABS_API_KEY e în Vercel.
+export const ELEVEN_VOICES: Record<string, string> = {
+  "ElevenLabs · JARVIS (vocea ta)": "4oVaL1VMKFtdfA1dQPol",
+  "ElevenLabs · Alex (română)": "xHIzJ4zBhlGcvJscsdON",
+};
+export const ELEVEN_MODEL = process.env.ELEVENLABS_TTS_MODEL || "eleven_flash_v2_5";
+
+export function elevenKey(): string | null {
+  return process.env.ELEVENLABS_API_KEY || null;
+}
+
 export const TTS_MODEL = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
 
 export function defaultVoice(): string {
