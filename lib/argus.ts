@@ -519,7 +519,11 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
       properties: {
         actiune: { type: "string", enum: ["pune", "pauza", "urmatoarea", "anterioara", "volum", "ce_canta"] },
         ce: { type: "string", description: "Ce să caute, la „pune”: titlu, artist, album sau playlist, cum a spus Daniel" },
-        tip: { type: "string", enum: ["melodie", "artist", "album", "playlist"], description: "Implicit melodie; artist dacă a spus doar un nume de cântăreț" },
+        tip: {
+          type: "string",
+          enum: ["melodie", "artist", "album", "playlist", "favorite"],
+          description: "Implicit melodie; artist dacă a spus doar un nume de cântăreț; playlist pentru playlisturile lui (se caută întâi în biblioteca lui); favorite pentru melodiile lui apreciate („melodiile mele”, „favoritele”)",
+        },
         valoare: { type: "number", description: "Volumul, 0-100, la „volum”" },
       },
       required: ["actiune"],

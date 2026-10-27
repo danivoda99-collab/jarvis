@@ -10,6 +10,27 @@ const NO_DEVICE = "Nu văd niciun dispozitiv";
 
 const TYPES = { melodie: "track", playlist: "playlist", artist: "artist", album: "album" } as const;
 
+// Fără diacritice și majuscule, ca „Dimineață” să se potrivească cu „dimineata”.
+function plain(text: string) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+const LIKED = /\b(favorit|apreciat|liked|preferat|melodiile mele|piesele mele|biblioteca)/;
+
+// Playlisturile lui Daniel (inclusiv cele private): întâi potrivirea exactă, apoi cea care conține ce a cerut.
+async function ownPlaylist(call: SpotifyCall, query: string, loose: boolean): Promise<Item | undefined> {
+  const wanted = plain(query).replace(/^playlist(ul)?\s+/, "");
+  const lists: Item[] = [];
+  for (let offset = 0; offset < 200; offset += 50) {
+    const { data } = await call<{ items: (Item | null)[]; next: string | null }>(`/me/playlists?limit=50&offset=${offset}`);
+    lists.push(...((data?.items ?? []).filter(Boolean) as Item[]));
+    if (!data?.next) break;
+  }
+  const exact = lists.find((item) => plain(item.name) === wanted);
+  if (exact || !loose) return exact;
+  return lists.find((item) => plain(item.name).includes(wanted) || (wanted.length > 3 && wanted.includes(plain(item.name))));
+}
+
 function describe(item?: Item) {
   if (!item) return "";
   const who = item.artists?.map((artist) => artist.name).join(", ") || item.owner?.display_name;
@@ -63,13 +84,30 @@ export async function POST(request: Request) {
         // iPhone-ul a „adormit” Spotify: telefonul îl deschide direct, de unde a rămas.
         if (error?.startsWith(NO_DEVICE)) return NextResponse.json({ error, deschide: "spotify:" }, { status: 502 });
       } else {
-        const type = TYPES[(body.tip as keyof typeof TYPES) ?? "melodie"] ?? "track";
-        const { data } = await call<Record<string, { items: (Item | null)[] }>>(
-          `/search?${new URLSearchParams({ q: query, type, limit: "1", market: "RO" })}`,
-        );
-        const found = data?.[`${type}s`]?.items?.find(Boolean) ?? undefined;
-        if (!found) return NextResponse.json({ error: `N-am găsit „${query}” pe Spotify.` }, { status: 404 });
-        const payload = type === "track" ? { uris: [found.uri] } : { context_uri: found.uri };
+        let found: Item | undefined;
+        let payload: Record<string, unknown>;
+        if (body.tip === "favorite" || LIKED.test(plain(query))) {
+          // Melodiile apreciate de Daniel, amestecate.
+          const { data } = await call<{ items: { track: Item | null }[] }>("/me/tracks?limit=50");
+          const uris = (data?.items ?? []).map((entry) => entry.track?.uri).filter(Boolean) as string[];
+          if (!uris.length) return NextResponse.json({ error: "Nu văd melodii apreciate. Reconectează Spotify din aplicație și încearcă din nou." }, { status: 404 });
+          uris.sort(() => Math.random() - 0.5);
+          found = { name: "melodiile tale apreciate", uri: "spotify:collection:tracks" };
+          payload = { uris };
+        } else {
+          // Întâi biblioteca lui (playlisturi private incluse), apoi căutarea publică.
+          found = body.tip !== "artist" ? await ownPlaylist(call, query, body.tip === "playlist") : undefined;
+          if (found) payload = { context_uri: found.uri };
+          else {
+            const type = TYPES[(body.tip as keyof typeof TYPES) ?? "melodie"] ?? "track";
+            const { data } = await call<Record<string, { items: (Item | null)[] }>>(
+              `/search?${new URLSearchParams({ q: query, type, limit: "1", market: "RO" })}`,
+            );
+            found = data?.[`${type}s`]?.items?.find(Boolean) ?? undefined;
+            if (!found) return NextResponse.json({ error: `N-am găsit „${query}” pe Spotify.` }, { status: 404 });
+            payload = type === "track" ? { uris: [found.uri] } : { context_uri: found.uri };
+          }
+        }
         error = await onDevice(call, "/me/player/play", { method: "PUT", body: JSON.stringify(payload) });
         text = `Pun ${describe(found)}.`;
         // iPhone-ul a „adormit” Spotify: telefonul deschide Spotify direct pe ce s-a cerut.
