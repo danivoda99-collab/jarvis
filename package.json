@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "check": "tsc --noEmit -p . && node --check bridge/argus-bridge.mjs && node --experimental-strip-types --no-warnings --test tests/*.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.134.0",

@@ -1103,8 +1103,8 @@ async function morningBrief(config) {
     config,
     [
       `Azi e ${today.date}, dimineața. Brief-ul zilei pentru Daniel, automat; el nu a cerut nimic acum. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
-      "Din Google Calendar: întâlnirile de azi (ora, cu cine, unde). Din Gmail: necititele cu eticheta „De făcut” și mailurile de la oameni reali din ultimele 24 de ore (nu reclame, nu notificări automate); un mail de la un client OVB îl numești doar „mail de la un client”, fără nume sau detalii. Sarcinile nu le pui, vin separat.",
-      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Azi ai 3 întâlniri, prima la 11 cu Mihai, și 2 mailuri care așteaptă răspuns.”). Apoi rândul VIZUAL cu „puncte”: întâi întâlnirile (titlu = ora și numele, text = cu cine și unde, nivel = important), apoi mailurile (titlu = expeditorul, text = ce vrea, nivel = important dacă cere un răspuns, altfel info). Cel mult 8 puncte. După rândul VIZUAL nu mai scrii nimic. Dacă ziua e liberă, primul rând spune asta.",
+      "Din Google Calendar: întâlnirile de azi (ora, cu cine, unde). Din Gmail: necititele cu eticheta „De făcut” și mailurile de la oameni reali din ultimele 24 de ore (nu reclame, nu notificări automate); un mail de la un client OVB îl numești doar „mail de la un client”, fără nume sau detalii. Sarcinile nu le pui, vin separat. Din Google Calendar (inclusiv calendarul de zile de naștere din Contacte): cine din echipă, familie sau prieteni are azi ziua; pentru fiecare, un mesaj scurt și cald de la Daniel, pe tonul lui (vezi memorie.md).",
+      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Azi ai 3 întâlniri, prima la 11 cu Mihai, și 2 mailuri care așteaptă răspuns.”). Apoi rândul VIZUAL cu „puncte”: întâi întâlnirile (titlu = ora și numele, text = cu cine și unde, nivel = important), apoi zilele de naștere (titlu = „La mulți ani, <nume>”, text = cine e, nivel = important, mesaj = {\"catre\": \"<nume WhatsApp din contacte.md>\", \"text\": \"<mesajul>\"}), apoi mailurile (titlu = expeditorul, text = ce vrea, nivel = important dacă cere un răspuns, altfel info). Cel mult 8 puncte. După rândul VIZUAL nu mai scrii nimic. Dacă ziua e liberă, primul rând spune asta.",
     ].join("\n\n"),
   );
   if (!run.ok) {
@@ -1119,14 +1119,15 @@ async function morningBrief(config) {
   log("Brief-ul a plecat pe telefon.");
 }
 
-// ——— Reamintirea to-do-urilor: de două ori pe zi (implicit 10 și 17, „sarciniOre” în config.json), sarcinile rămase,
-// cu „Gata” și „Mâine” pe fiecare, pe telefon. Doar dacă e ceva scadent azi, întârziat sau fără dată. ———
+// ——— Reamintirea to-do-urilor: de două ori pe zi (implicit 12 și 17, „sarciniOre” în config.json), sarcinile rămase,
+// cu „Gata” și „Mâine” pe fiecare, pe telefon. Doar dacă e ceva scadent azi, întârziat sau fără dată.
+// Nu la 10, ca să nu vină odată cu brief-ul. ———
 const TODO_FILE = join(HERE, "reamintire-sarcini.json");
 
 async function todoReminder(config) {
   const today = bucharestDay();
   const hour = bucharestHour();
-  const hours = Array.isArray(config.sarciniOre) && config.sarciniOre.length ? config.sarciniOre : [10, 17];
+  const hours = Array.isArray(config.sarciniOre) && config.sarciniOre.length ? config.sarciniOre : [12, 17];
   const slot = hours.filter((value) => Number.isInteger(value) && hour >= value && hour < value + 3).pop();
   if (slot === undefined) return;
   const key = `${today.date}@${slot}`;
@@ -1152,6 +1153,45 @@ async function todoReminder(config) {
   const first = `Ai ${picked.length === 1 ? "o sarcină rămasă" : `${picked.length} sarcini rămase`}${lateCount ? `, ${lateCount} întârziate` : ""}. Bifează ce ai făcut sau amână pe mâine.`;
   await api(config, "POST", { titlu: "De făcut", cerere: "Reamintirea to-do-urilor", rezultat: first, vizual: { puncte } });
   log("Reamintirea sarcinilor a plecat pe telefon.");
+}
+
+// ——— Rezumatul serii („Ziua ta”): pornit doar cu „rezumatSeara”: true în config.json, la 21 (sau „rezumatOra”). ———
+const RECAP_FILE = join(HERE, "rezumat-seara.json");
+
+async function eveningRecap(config) {
+  const today = bucharestDay();
+  const hour = bucharestHour();
+  const state = loadState(RECAP_FILE);
+  const from = Number.isInteger(config.rezumatOra) ? config.rezumatOra : 21;
+  if (hour < from || hour >= 23 || state.facut === today.date) return;
+  if (Date.now() - (state.incercat || 0) < 30 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(RECAP_FILE, JSON.stringify(state, null, 2));
+  const { sarcini = [] } = await api(config, "GET", undefined, "", "/api/sarcini");
+  const open = sarcini.filter((task) => !task.scadenta || task.scadenta <= today.date).slice(0, 8);
+  const run = await runClaude(
+    config,
+    [
+      `Azi e ${today.date}, seara. Rezumatul zilei pentru Daniel, automat. Doar citire: nu trimiți, nu scrii și nu ștergi nimic.`,
+      "Din Google Calendar: ce întâlniri a avut azi și prima întâlnire de mâine (ora, cu cine, unde). Cu un client OVB spui doar ora și „întâlnire cu un client”.",
+      `Sarcinile rămase pentru azi sau fără dată: ${open.map((task) => task.titlu).join("; ") || "niciuna"}.`,
+      "Răspunsul: primul rând, o propoziție de cel mult 25 de cuvinte, bună de citit cu voce (de exemplu „Ai avut 3 întâlniri azi; mâine începi la 9:30 cu Mihai.”). Apoi rândul VIZUAL cu „puncte”: prima întâlnire de mâine (nivel important), apoi cel mult 3 sarcini rămase (titlu = exact titlul sarcinii de mai sus, nivel info). După rândul VIZUAL nu mai scrii nimic.",
+    ].join("\n\n"),
+  );
+  if (!run.ok) {
+    noteLimit(run.text);
+    return;
+  }
+  const { text, vizual } = splitVisual(run.text);
+  // Sarcinile din puncte primesc butoanele „Gata” / „Mâine” când titlul se potrivește.
+  for (const point of vizual?.puncte || []) {
+    const task = open.find((item) => item.titlu.slice(0, 40) === String(point.titlu || "").slice(0, 40));
+    if (task) point.sarcina = task.id;
+  }
+  await api(config, "POST", { titlu: "Ziua ta", cerere: "Rezumatul serii", rezultat: text, vizual });
+  state.facut = today.date;
+  writeFileSync(RECAP_FILE, JSON.stringify(state, null, 2));
+  log("Rezumatul serii a plecat pe telefon.");
 }
 
 function loadPreps() {
@@ -1266,6 +1306,7 @@ function runChores(config) {
     if (config.echipaSeara !== false) await teamCoach(config);
     if (config.brief !== false) await morningBrief(config);
     if (config.sarcini !== false) await todoReminder(config).catch((error) => log("Reamintirea sarcinilor n-a mers:", error.message));
+    if (config.rezumatSeara === true) await eveningRecap(config).catch((error) => log("Rezumatul serii n-a mers:", error.message));
   })()
     .catch((error) => log("Treburile automate n-au mers:", error.message))
     .finally(() => (chores = false));
