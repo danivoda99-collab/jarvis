@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { command } from "@/lib/cereri";
 
 export const GOOGLE_COOKIE = "argus_google";
 export const TIME_ZONE = "Europe/Bucharest";
@@ -88,9 +89,28 @@ export async function googleConnected(): Promise<boolean> {
 export class GoogleError extends Error {}
 
 // Face un apel la Google cu un token de acces nou, obținut din cel de reîmprospătare.
-export async function google<T>(url: string, init: RequestInit = {}): Promise<T> {
+// Telefonul ține conexiunea în cookie; o copie criptată stă și în Redis, ca laptopul (care n-are cookie-ul Google)
+// să poată citi sarcinile pentru reamintiri. Doar cererile autentificate ajung aici.
+const SHARED_TOKEN = "argus:google";
+let sharedSaved = "";
+
+async function refreshTokenFor(): Promise<string | null> {
   const sealed = (await cookies()).get(GOOGLE_COOKIE)?.value;
-  const refreshToken = sealed ? openToken(sealed) : null;
+  const own = sealed ? openToken(sealed) : null;
+  if (own && sealed) {
+    if (sharedSaved !== sealed) {
+      await command("SET", SHARED_TOKEN, sealed)
+        .then(() => (sharedSaved = sealed))
+        .catch(() => undefined);
+    }
+    return own;
+  }
+  const shared = await command<string | null>("GET", SHARED_TOKEN).catch(() => null);
+  return shared ? openToken(shared) : null;
+}
+
+export async function google<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const refreshToken = await refreshTokenFor();
   if (!refreshToken) {
     throw new GoogleError("Google nu e conectat. Daniel trebuie să apese „Conectează Google” în aplicație.");
   }

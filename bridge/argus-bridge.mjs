@@ -5,6 +5,7 @@
 // Pornire: node argus-bridge.mjs (prima dată cere codul aplicației).
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1347,6 +1348,34 @@ async function shareMemory(config) {
   }
 }
 
+// ——— Actualizarea singură: la 30 de minute, puntea își cere codul de pe server (aceeași versiune ca aplicația).
+// Dacă e altul, îl verifică (node --check), păstrează copia veche lângă și îl pune în loc; repornirea o face pârghia de mai sus.
+// config.json nu e atins. Oprită cu „actualizareAutomata”: false. ———
+let updateCheckedAt = 0;
+const UPDATE_EVERY_MS = 30 * 60_000;
+
+async function selfUpdate(config) {
+  if (config.actualizareAutomata === false || Date.now() - updateCheckedAt < UPDATE_EVERY_MS) return;
+  updateCheckedAt = Date.now();
+  for (const name of ["team-voda.mjs", "argus-bridge.mjs"]) {
+    const target = join(HERE, name);
+    const { cod, amprenta } = await api(config, "GET", undefined, `?fisier=${name}`, "/api/punte");
+    if (!cod || createHash("sha256").update(cod).digest("hex") !== amprenta) continue;
+    const local = existsSync(target) ? readFileSync(target, "utf8") : "";
+    if (local === cod || local.replace(/\r\n/g, "\n") === cod) continue;
+    const fresh = `${target}.nou`;
+    writeFileSync(fresh, cod);
+    if (spawnSync(process.execPath, ["--check", fresh], { windowsHide: true }).status !== 0) {
+      unlinkSync(fresh);
+      log(`Versiunea nouă a lui ${name} nu trece verificarea; o păstrez pe cea veche.`);
+      continue;
+    }
+    if (local) writeFileSync(target.replace(/\.mjs$/, ".anterior.mjs"), local);
+    renameSync(fresh, target);
+    log(`Am luat singur versiunea nouă a lui ${name}.`);
+  }
+}
+
 let chores = false;
 let choresAt = 0;
 function runChores(config) {
@@ -1354,6 +1383,8 @@ function runChores(config) {
   chores = true;
   choresAt = Date.now();
   (async () => {
+    await selfUpdate(config).catch((error) => log("Nu am putut verifica versiunea nouă:", error.message));
+    if (updated()) return;
     trimLanes();
     warmWhatsApp(config);
     await shareMemory(config).catch(() => {});
