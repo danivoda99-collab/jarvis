@@ -172,6 +172,7 @@ const WAKE_KEY = "argus-trezire";
 const STANDBY_MS = 60 * 60_000;
 // Brief-ul de dimineață din oficiu: prima deschidere dintre 5 și 11, o dată pe zi.
 const BRIEF_KEY = "argus-brief-auto";
+const MORNING_MUSIC_KEY = "argus-muzica-dimineata";
 // Întreruperea cu vocea (în test): cât vorbește Argus, dacă Daniel începe să vorbească, Argus tace și ascultă.
 const BARGE_KEY = "argus-intrerupe";
 const BRIEF_DAY_KEY = "argus-brief-zi";
@@ -975,6 +976,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const wakeWordRef = useRef(false);
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
+  const morningRef = useRef(false); // pornit cu ?dimineata=1: muzica se oprește cât vorbește cu Argus
+  const [morningMusic, setMorningMusic] = useState("");
   // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
   const [quickStart, setQuickStart] = useState(false);
   useEffect(() => {
@@ -994,10 +997,39 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       }
     }
     if (params.get("asculta") === "1") setQuickStart(true);
-    if (params.has("masina") || params.has("mod") || params.has("asculta")) {
+    let playlist = "";
+    try {
+      playlist = localStorage.getItem(MORNING_MUSIC_KEY) ?? "";
+    } catch {
+      // fără playlist salvat
+    }
+    setMorningMusic(playlist);
+    // ?dimineata=1 (automatizarea „Când oprești alarma” din iPhone): pune muzica și arată „atinge oriunde” pentru brief.
+    if (params.get("dimineata") === "1") {
+      const ce = (params.get("playlist") ?? playlist).trim();
+      morningRef.current = true;
+      setQuickStart(true);
+      if (spotifyConnected) {
+        void fetch("/api/spotify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ce ? { actiune: "pune", ce, tip: "playlist" } : { actiune: "pune" }),
+        })
+          .then((response) => response.json().catch(() => null))
+          .then((data: { error?: string } | null) => {
+            if (data?.error) log("agent", data.error);
+          })
+          .catch(() => {});
+      } else {
+        log("agent", "Pentru muzica de dimineață, conectează întâi Spotify (butonul de jos).");
+      }
+    }
+    if (params.has("masina") || params.has("mod") || params.has("asculta") || params.has("dimineata")) {
       params.delete("masina");
       params.delete("mod");
       params.delete("asculta");
+      params.delete("dimineata");
+      params.delete("playlist");
       const rest = params.toString();
       window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
     }
@@ -1490,7 +1522,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     }
     activeRef.current = true;
     silentRef.current = false;
-    if (drivingRef.current && spotifyConnected) {
+    if ((drivingRef.current || morningRef.current) && spotifyConnected) {
       musicPausedRef.current = false;
       pauseMusic();
     }
@@ -1568,7 +1600,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     standbyRef.current = 0;
     setStandby(false);
     quietRef.current = 0;
-    if (drivingRef.current) pauseMusic();
+    if (drivingRef.current || morningRef.current) pauseMusic();
   }
 
   function end() {
@@ -1910,6 +1942,28 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
               >
                 {bargeIn ? "Pornit (test)" : "Oprit"}
               </button>
+            </dd>
+          </div>
+          <div>
+            <dt>Muzică dimineața</dt>
+            <dd>
+              <input
+                className="voice"
+                value={morningMusic}
+                placeholder="Numele playlistului"
+                aria-label="Playlist pentru dimineață"
+                title="Ce pune Argus când deschizi adresa ?dimineata=1 (de exemplu din automatizarea alarmei din iPhone). Gol: continuă ce ascultai."
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setMorningMusic(next);
+                  try {
+                    if (next.trim()) localStorage.setItem(MORNING_MUSIC_KEY, next);
+                    else localStorage.removeItem(MORNING_MUSIC_KEY);
+                  } catch {
+                    // fără memorare
+                  }
+                }}
+              />
             </dd>
           </div>
           <div>
