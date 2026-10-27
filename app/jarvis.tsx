@@ -661,13 +661,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       if (action === "pune" && !raw.startsWith("Eroare")) musicOnRef.current = true;
       if (action === "pune" && lastSpotifyOpenRef.current) {
         // Spotify „adormit” pe iPhone: îl deschidem direct pe ce s-a cerut; conversația se închide după răspuns.
+        // Conversația se închide acum, fără să mai vorbească: altfel, la întoarcerea în Argus, ar vorbi și ar opri muzica.
         const { uri, piesa } = lastSpotifyOpenRef.current;
         lastSpotifyOpenRef.current = null;
-        musicOnRef.current = true;
-        setTimeout(() => {
-          window.location.href = uri;
-        }, 1500);
-        return `Deschid Spotify pe telefon${piesa ? ` cu ${piesa}` : ""}. Spune-i lui Daniel doar asta, scurt.`;
+        end();
+        log("agent", `Am deschis Spotify${piesa ? ` cu ${piesa}` : ""}.`);
+        window.location.href = uri;
+        return "Spotify s-a deschis pe telefon. Nu mai spune nimic.";
       }
       return raw;
     },
@@ -1501,6 +1501,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       setPhase("thinking");
       const results = await Promise.all(tools.map(runTool));
       historyRef.current.push({ role: "user", content: results });
+      // O unealtă a închis conversația (de exemplu a deschis Spotify): nu mai cerem și nu mai spunem nimic.
+      if (!activeRef.current) return;
     }
     if (!activeRef.current) return;
     cleanRef.current = historyRef.current.at(-1)?.role === "assistant";
