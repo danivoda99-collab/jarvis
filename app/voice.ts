@@ -211,6 +211,11 @@ export function primeSpeech() {
   synth.speak(new SpeechSynthesisUtterance(""));
 }
 
+// La final de conversație eliberăm sunetul, ca iPhone-ul să lase Spotify să cânte cât Argus stă deschis.
+export function releaseAudio() {
+  if (context?.state === "running") void context.suspend().catch(() => {});
+}
+
 // Pe iPhone, resume() poate rămâne agățat cât e un apel sau Siri; nu așteptăm mai mult de o secundă.
 function resumeAudio(ctx: AudioContext): Promise<void> {
   if (ctx.state === "running") return Promise.resolve();
