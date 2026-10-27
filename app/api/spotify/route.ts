@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
 import { SpotifyError, spotifyClient, type SpotifyCall } from "@/lib/spotify";
 
@@ -8,11 +8,36 @@ type Playing = { is_playing: boolean; item?: Item; device?: Device };
 
 const NO_DEVICE = "Nu văd niciun dispozitiv";
 
+export const maxDuration = 60;
+
+// Spotify „adormit” pe iPhone: telefonul îl deschide, iar serverul așteaptă să apară ca dispozitiv (cel mult ~25 s)
+// și pornește singur ce s-a cerut, ca Daniel doar să se întoarcă în Argus.
+function playWhenAwake(call: SpotifyCall, payload: Record<string, unknown> | null) {
+  after(async () => {
+    for (let tries = 0; tries < 17; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const { data } = await call<{ devices: Device[] }>("/me/player/devices");
+      const device = data?.devices?.find((item) => item.type === "Smartphone") ?? data?.devices?.[0];
+      if (!device) continue;
+      await call(`/me/player/play?device_id=${encodeURIComponent(device.id)}`, {
+        method: "PUT",
+        body: payload ? JSON.stringify(payload) : undefined,
+      });
+      return;
+    }
+  });
+}
+
 const TYPES = { melodie: "track", playlist: "playlist", artist: "artist", album: "album" } as const;
 
 // Fără diacritice și majuscule, ca „Dimineață” să se potrivească cu „dimineata”.
 function plain(text: string) {
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 const LIKED = /\b(favorit|apreciat|liked|preferat|melodiile mele|piesele mele|biblioteca)/;
@@ -29,7 +54,21 @@ async function ownPlaylist(call: SpotifyCall, query: string, loose: boolean): Pr
   const exact = lists.find((item) => plain(item.name) === wanted);
   if (exact) return exact;
   // Numele playlistului conține ce a spus („chill” → „Chill seara”); invers doar când a cerut clar un playlist.
-  return lists.find((item) => (wanted.length > 2 && plain(item.name).includes(wanted)) || (loose && wanted.length > 3 && wanted.includes(plain(item.name))));
+  const contains = lists.find((item) => (wanted.length > 2 && plain(item.name).includes(wanted)) || (loose && wanted.length > 3 && wanted.includes(plain(item.name))));
+  if (contains) return contains;
+  // Altfel, cel cu cele mai multe cuvinte comune („every morning” → „Every morning, every day”), cel puțin jumătate.
+  const words = new Set(wanted.split(" ").filter((word) => word.length > 1));
+  let best: Item | undefined;
+  let bestScore = 0;
+  for (const item of lists) {
+    const name = new Set(plain(item.name).split(" "));
+    const score = [...words].filter((word) => name.has(word)).length / Math.max(1, words.size);
+    if (score > bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 0.5 && (loose || bestScore === 1) ? best : undefined;
 }
 
 function describe(item?: Item) {
@@ -83,7 +122,10 @@ export async function POST(request: Request) {
         error = await onDevice(call, "/me/player/play", { method: "PUT" });
         text = "Am pornit muzica.";
         // iPhone-ul a „adormit” Spotify: telefonul îl deschide direct, de unde a rămas.
-        if (error?.startsWith(NO_DEVICE)) return NextResponse.json({ error, deschide: "spotify:" }, { status: 502 });
+        if (error?.startsWith(NO_DEVICE)) {
+          playWhenAwake(call, null);
+          return NextResponse.json({ error, deschide: "spotify:" }, { status: 502 });
+        }
       } else {
         let found: Item | undefined;
         let payload: Record<string, unknown>;
@@ -113,9 +155,18 @@ export async function POST(request: Request) {
         text = `Pun ${describe(found)}.`;
         // iPhone-ul a „adormit” Spotify: telefonul deschide Spotify direct pe ce s-a cerut.
         if (error?.startsWith(NO_DEVICE)) {
-          return NextResponse.json({ error, deschide: found.uri, piesa: describe(found) }, { status: 502 });
+          playWhenAwake(call, payload);
+          return NextResponse.json({ error, deschide: found.uri.startsWith("spotify:collection") ? "spotify:" : found.uri, piesa: describe(found) }, { status: 502 });
         }
       }
+    } else if (action === "reia") {
+      // După conversație: muzica pornește la loc; dacă iPhone-ul a adormit Spotify, mai încearcă câteva secunde, fără să-l deschidă.
+      error = await onDevice(call, "/me/player/play", { method: "PUT" });
+      if (error?.startsWith(NO_DEVICE)) {
+        playWhenAwake(call, null);
+        error = null;
+      }
+      text = "Am pornit muzica la loc.";
     } else if (action === "pauza_daca_canta") {
       // Modul mașină: muzica se oprește cât vorbești cu Argus și pornește la loc după.
       const { data } = await call<Playing>("/me/player");
