@@ -3,7 +3,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { situation } from "@/lib/buget";
 import { command, laptopAway } from "@/lib/cereri";
 import { addDays, bucharestIso, formatLocal, google, todayInBucharest, TIME_ZONE } from "@/lib/google";
-import { amount } from "@/lib/vizual";
+import { budgetMoney } from "@/lib/vizual";
 
 // Cifrele mici de pe ecranul principal: următoarea întâlnire, bugetul lunii, sarcinile și echipa.
 // Fiecare bucată merge separat: dacă Google nu răspunde, restul tot apare.
@@ -30,17 +30,18 @@ async function nextMeeting() {
 }
 
 async function budget() {
-  const { luna, tabel } = await situation();
-  const total = tabel.find((row) => row[0] === "Total");
-  const spent = amount(total?.[2]);
-  const planned = amount(total?.[1]);
-  if (spent === null || !planned) return null;
-  // Cât mai e în categoriile care nu s-au terminat; totalul net scade și depășirile din alte categorii.
-  const free = tabel
-    .slice(1)
-    .filter((row) => row[0] !== "Total")
-    .reduce((sum, row) => sum + Math.max(0, amount(row[3]) ?? 0), 0);
-  return { luna, procent: Math.round((spent / planned) * 100), ramas: Math.round(planned - spent), liber: Math.round(free) };
+  const { luna, tabel, venit } = await situation();
+  const m = budgetMoney(tabel, venit);
+  if (!m.budget) return null;
+  // Bani: venit − cheltuit, cât ar trebui să fie în cont (îl compară cu banca). Liber: după ce mai e de plătit din buget.
+  return {
+    luna,
+    procent: Math.round((m.spent / m.budget) * 100),
+    ramas: Math.round(m.budget - m.spent),
+    liber: m.free === null ? undefined : Math.round(m.free),
+    bani: m.money === null ? undefined : Math.round(m.money),
+    deplata: Math.round(m.toPay),
+  };
 }
 
 async function tasks() {

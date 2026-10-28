@@ -15,6 +15,9 @@ export async function situation() {
     .slice(3)
     .filter((row) => row[0] && (row[0] === "Total" || row[1] !== "0" || row[2] !== "0"))
     .map((row) => [row[0], row[1] ?? "", row[2] ?? "", row[3] ?? "", row[4] ?? ""]);
-  return { luna: month, tabel: [header, ...body] };
+  // Venitul lunii, din fila „Lunar” (rândurile 9–20, luna în A, venitul în B).
+  const lunar = await google<{ values?: string[][] }>(`${SHEET}/values/${encodeURIComponent("Lunar!A9:B20")}`).catch(() => null);
+  const venit = lunar?.values?.find((row) => row[0]?.trim() === month.trim())?.[1]?.trim() || undefined;
+  return { luna: month, tabel: [header, ...body], venit };
 }
 

@@ -135,33 +135,47 @@ export function amount(value: unknown): number | null {
 }
 
 // Situația bugetului (Categorie, Buget, Cheltuit, Rămas, %): cifre mari și bare pentru toate categoriile cu buget.
-// „Rămas” din Total e net (scade și depășirile), așa că arătăm separat cât mai e în categorii și cât s-a depășit.
-export function budgetVizual(table: string[][]): Vizual | undefined {
+// Cu venitul lunii: bani rămași (venit − cheltuit), cât mai e de plătit din buget și cât rămâne liber după plăți.
+// „Rămas” din Total e doar buget − cheltuit și scade și depășirile, deci nu sunt bani.
+export function budgetMoney(table: string[][], venit?: string) {
   const rows = table.slice(1);
-  const parse = (value: string) => amount(value);
   const total = rows.find((row) => row[0] === "Total");
-  const categories = rows.filter((row) => row[0] !== "Total");
-  const progres = categories
-    .map((row) => ({ eticheta: row[0], valoare: parse(row[2]) ?? 0, maxim: parse(row[1]) ?? 0, unitate: "lei" }))
+  const left = rows.filter((row) => row[0] !== "Total").map((row) => amount(row[3]) ?? 0);
+  const toPay = left.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
+  const over = -left.filter((value) => value < 0).reduce((sum, value) => sum + value, 0);
+  const spent = amount(total?.[2]) ?? 0;
+  const income = venit ? amount(venit) : null;
+  const money = income === null ? null : income - spent;
+  return { spent, budget: amount(total?.[1]) ?? 0, toPay, over, income, money, free: money === null ? null : money - toPay };
+}
+
+export function budgetVizual(table: string[][], venit?: string): Vizual | undefined {
+  const rows = table.slice(1);
+  const progres = rows
+    .filter((row) => row[0] !== "Total")
+    .map((row) => ({ eticheta: row[0], valoare: amount(row[2]) ?? 0, maxim: amount(row[1]) ?? 0, unitate: "lei" }))
     .filter((item) => item.maxim > 0)
     .sort((a, b) => b.valoare / b.maxim - a.valoare / a.maxim);
-  const left = categories.map((row) => parse(row[3]) ?? 0);
-  const lei = (value: number) => `${value.toLocaleString("ro-RO", { maximumFractionDigits: 2 })} lei`;
-  const fromCell = (value: string) => {
-    const parsed = parse(value);
-    return parsed === null ? `${value} lei` : lei(parsed);
-  };
-  const free = left.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
-  const over = -left.filter((value) => value < 0).reduce((sum, value) => sum + value, 0);
-  const cifre = total
-    ? [
-        { eticheta: "Cheltuit", valoare: fromCell(total[2]) },
-        { eticheta: "Buget", valoare: fromCell(total[1]) },
-        { eticheta: "Rămas net", valoare: fromCell(total[3]), nota: over ? "după depășiri" : undefined },
-        { eticheta: "Mai ai în categorii", valoare: lei(free) },
-        ...(over ? [{ eticheta: "Peste buget", valoare: lei(over) }] : []),
-      ]
-    : undefined;
+  const lei = (value: number) => `${Math.round(value).toLocaleString("ro-RO")} lei`;
+  const m = budgetMoney(table, venit);
+  const hasTotal = rows.some((row) => row[0] === "Total");
+  const cifre = !hasTotal
+    ? undefined
+    : m.income !== null && m.money !== null && m.free !== null
+      ? [
+          { eticheta: "Bani rămași", valoare: lei(m.money), nota: "compară cu banca" },
+          { eticheta: "Venit", valoare: lei(m.income) },
+          { eticheta: "Cheltuit", valoare: lei(m.spent) },
+          { eticheta: "De plătit din buget", valoare: lei(m.toPay) },
+          { eticheta: "Liber după plăți", valoare: lei(m.free) },
+          ...(m.over ? [{ eticheta: "Peste buget", valoare: lei(m.over) }] : []),
+        ]
+      : [
+          { eticheta: "Cheltuit", valoare: lei(m.spent) },
+          { eticheta: "Buget", valoare: lei(m.budget) },
+          { eticheta: "De plătit din buget", valoare: lei(m.toPay) },
+          ...(m.over ? [{ eticheta: "Peste buget", valoare: lei(m.over) }] : []),
+        ];
   return cleanVizual({ cifre, progres });
 }
 

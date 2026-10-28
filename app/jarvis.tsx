@@ -74,7 +74,7 @@ function spokenPart(text: string): { body: string; closed: boolean } | null {
 
 type Panou = {
   intalnire: { titlu: string; inceput: string } | null;
-  buget: { procent: number; ramas: number; liber?: number } | null;
+  buget: { procent: number; ramas: number; liber?: number; deplata?: number; bani?: number } | null;
   sarcini: { ramase: number; azi: number } | null;
   echipa: { raportat: number; total: number; subTel?: number; analize?: number; tel?: number; actualizat: string } | null;
 };
@@ -442,6 +442,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       const data = (await response.json()) as { ok?: boolean; error?: string; deschide?: string; piesa?: string };
       if (path === "/api/spotify" && data.deschide) lastSpotifyOpenRef.current = { uri: data.deschide, piesa: data.piesa };
       if (!response.ok) return `Eroare: ${data.error ?? response.status}`;
+      // După o schimbare în to-do, buget sau agendă, cifrele din jurul sferei se iau din nou, nu la 5 minute.
+      if (method !== "GET" && /^\/api\/(sarcini|buget|agenda)/.test(path)) setTimeout(() => panouReloadRef.current(), 600);
       return data.ok && Object.keys(data).length === 1 ? "Gata, făcut." : JSON.stringify(data);
     } catch {
       return "Eroare: nu am putut ajunge la server.";
@@ -716,10 +718,10 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     buget_situatie: async () => {
       const raw = await callApi("/api/buget?situatie=1");
       if (raw.startsWith("Eroare")) return raw;
-      const data = JSON.parse(raw) as { luna?: string; tabel?: string[][] };
+      const data = JSON.parse(raw) as { luna?: string; tabel?: string[][]; venit?: string };
       if (data.tabel && data.tabel.length > 1) {
         // Bare pentru toate categoriile cu buget (cele aproape de limită sus), apoi cheltuielile fără buget; tabelul întreg doar dacă nu se pot citi cifrele.
-        const vizual = budgetVizual(data.tabel);
+        const vizual = budgetVizual(data.tabel, data.venit);
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
@@ -729,7 +731,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           module: "buget",
         });
       }
-      return `${raw}\nBarele de progres sunt pe ecran, cu toate categoriile. Spune pe scurt totalul, cât mai are în categorii și ce categorii au depășit bugetul. „Rămas” din Total e net, după depășiri.`;
+      return `${raw}\nBarele de progres sunt pe ecran, cu toate categoriile. Spune pe scurt: bani rămași (venit − cheltuit), cât mai are de plătit din buget, cât rămâne liber după plăți și ce categorii au depășit. „Rămas” din Total e doar buget − cheltuit, nu bani; nu-l prezenta ca bani rămași.`;
     },
     buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
       const amount = String(parameters.suma ?? "").trim();
@@ -1102,6 +1104,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [laptopOff, setLaptopOff] = useState<number | null>(null);
   // Cifrele mici din jurul sferei; se reîmprospătează la 5 minute și când revii în aplicație.
   const [panou, setPanou] = useState<Panou | null>(null);
+  const panouReloadRef = useRef<() => void>(() => {});
   useEffect(() => {
     let stopped = false;
     const load = () => {
@@ -1113,6 +1116,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         })
         .catch(() => {});
     };
+    panouReloadRef.current = load;
     load();
     const timer = setInterval(load, 5 * 60_000);
     document.addEventListener("visibilitychange", load);
@@ -2179,7 +2183,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             <button type="button" className={`stat right${panou.buget && panou.buget.procent >= 90 ? " warn" : ""}`} onClick={() => askFromTile("Cum stau cu bugetul luna asta?")} disabled={!panou.buget}>
               <span className="stat-label">Buget</span>
               <span className="stat-value">{panou.buget ? `${panou.buget.procent}%` : "—"}</span>
-              <span className="stat-sub">{panou.buget ? `mai ai ${(panou.buget.liber ?? panou.buget.ramas).toLocaleString("ro-RO")} lei` : "nu am acces"}</span>
+              <span className="stat-sub">{panou.buget
+                  ? panou.buget.bani !== undefined
+                    ? `ai ${panou.buget.bani.toLocaleString("ro-RO")} lei`
+                    : `de plătit ${(panou.buget.deplata ?? panou.buget.ramas).toLocaleString("ro-RO")} lei`
+                  : "nu am acces"}</span>
               {panou.buget && <span className="stat-bar"><i style={{ width: `${Math.min(100, panou.buget.procent)}%` }} /></span>}
             </button>
           </div>
