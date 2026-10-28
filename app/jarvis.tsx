@@ -74,7 +74,7 @@ function spokenPart(text: string): { body: string; closed: boolean } | null {
 
 type Panou = {
   intalnire: { titlu: string; inceput: string } | null;
-  buget: { procent: number; ramas: number; liber?: number } | null;
+  buget: { procent: number; ramas: number; liber?: number; deplata?: number } | null;
   sarcini: { ramase: number; azi: number } | null;
   echipa: { raportat: number; total: number; subTel?: number; analize?: number; tel?: number; actualizat: string } | null;
 };
@@ -716,10 +716,10 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     buget_situatie: async () => {
       const raw = await callApi("/api/buget?situatie=1");
       if (raw.startsWith("Eroare")) return raw;
-      const data = JSON.parse(raw) as { luna?: string; tabel?: string[][] };
+      const data = JSON.parse(raw) as { luna?: string; tabel?: string[][]; venit?: string };
       if (data.tabel && data.tabel.length > 1) {
         // Bare pentru toate categoriile cu buget (cele aproape de limită sus), apoi cheltuielile fără buget; tabelul întreg doar dacă nu se pot citi cifrele.
-        const vizual = budgetVizual(data.tabel);
+        const vizual = budgetVizual(data.tabel, data.venit);
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
@@ -729,7 +729,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           module: "buget",
         });
       }
-      return `${raw}\nBarele de progres sunt pe ecran, cu toate categoriile. Spune pe scurt totalul, cât mai are în categorii și ce categorii au depășit bugetul. „Rămas” din Total e net, după depășiri.`;
+      return `${raw}\nBarele de progres sunt pe ecran, cu toate categoriile. Spune pe scurt: bani rămași (venit − cheltuit), cât mai are de plătit din buget, cât rămâne liber după plăți și ce categorii au depășit. „Rămas” din Total e doar buget − cheltuit, nu bani; nu-l prezenta ca bani rămași.`;
     },
     buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
       const amount = String(parameters.suma ?? "").trim();
@@ -2179,7 +2179,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             <button type="button" className={`stat right${panou.buget && panou.buget.procent >= 90 ? " warn" : ""}`} onClick={() => askFromTile("Cum stau cu bugetul luna asta?")} disabled={!panou.buget}>
               <span className="stat-label">Buget</span>
               <span className="stat-value">{panou.buget ? `${panou.buget.procent}%` : "—"}</span>
-              <span className="stat-sub">{panou.buget ? `mai ai ${(panou.buget.liber ?? panou.buget.ramas).toLocaleString("ro-RO")} lei` : "nu am acces"}</span>
+              <span className="stat-sub">{panou.buget
+                  ? panou.buget.liber !== undefined
+                    ? `liber ${panou.buget.liber.toLocaleString("ro-RO")} lei`
+                    : `de plătit ${(panou.buget.deplata ?? panou.buget.ramas).toLocaleString("ro-RO")} lei`
+                  : "nu am acces"}</span>
               {panou.buget && <span className="stat-bar"><i style={{ width: `${Math.min(100, panou.buget.procent)}%` }} /></span>}
             </button>
           </div>
