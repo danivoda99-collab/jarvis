@@ -122,6 +122,8 @@ Echipa Voda (centralizatorul „MDS Voda Daniel 2026”, id 15kIi2yXoQOa22VRX88t
 - Totalurile le calculezi mereu din rândurile brute din „Raportari” (Trimis la, Data activitate, Cheie luna, Saptamana, Nume, …), nu din „Raportari Saptamana”: acela arată săptămâna aleasă manual într-o listă și poate fi pe altă săptămână (atunci e plin de zerouri). Componența echipei o iei din „_ConfigEchipa”.
 - Nu deschizi tabul „Inchideri”, „Service”, „_Service date” și nici fișiere cu clienți: au date de clienți. Lucrezi doar cu cifre pe consultant și totaluri.
 - „Cum stă echipa”, „raport echipă”: citești doar rândurile perioadei cerute (implicit săptămâna curentă, de sâmbătă), aduni pe consultant și compari cu Teluri. Rezumatul: totalul echipei, cine e peste obiectiv, cine e în urmă, cine n-a raportat. Pui VIZUAL cu „cifre” (totaluri), „progres” (analize și consultanțe față de obiectivul echipei), „bare” (consultanții, cu valoare2 = obiectivul sau săptămâna trecută) și un „tabel” scurt (Nume | Analize | Consultanțe | Semnate).
+- „Tel party” pe o săptămână = activitatea fiecăruia (Contacte, Analiza, Consultante, Service) din „Raportari” față de telul lui din „Teluri”. „Închideri” = Clienti/Contracte/UN semnate și Clienti/Contracte/Unitati platite din „Raportari”, pe om și total (tot fără tabul „Inchideri”). „Ultima săptămână încheiată” = ultima sâmbătă–vineri care s-a terminat. Pui VIZUAL cu „cifre” (totaluri), „bare” pe oameni și un „tabel” scurt.
+- La orice raport al echipei, înainte de rândul VIZUAL pui și un rând cu cifrele pentru ecranul lui Daniel, doar numere, fără nume: PANOU: {"raportat": <câți au trimis cel puțin un raport în săptămâna raportului>, "total": <câți sunt în echipă>, "subTel": <câți sunt mult sub tel>, "analize": <analizele echipei>, "tel": <obiectivul de analize al echipei>}.
 - „Cum stă X”: același lucru pentru o singură persoană, cu ultimele 4 săptămâni ca „linie”.
 - Aplicația Team Vodă (raportări, corecturi, obiective, Management) o folosești doar prin scriptul de lângă punte, niciodată direct în Sheet. Poți face în ea orice ar face Daniel, dar orice scriere pleacă doar după „Da”, pe exact ce a văzut:
   1. „node team-voda.mjs ping” îți dă câmpurile raportului, cheile Tel și funcțiile permise, cu semnăturile lor. Dacă spune că intrarea nu e configurată, îi spui scurt lui Daniel că mai are de pus cheia pe laptop și te oprești.
@@ -829,7 +831,9 @@ async function handle(config, cerere) {
     warmWhatsApp(config);
     return;
   }
-  const { text: clean, vizual } = splitVisual(text);
+  const { text: panel, rest } = takePanel(text);
+  if (panel) await api(config, "POST", { echipa: panel }, "", "/api/panou").catch((error) => log("Cifrele echipei n-au ajuns pe ecran:", error.message));
+  const { text: clean, vizual } = splitVisual(rest);
   await report(config, { id: cerere.id, status: "gata", rezultat: clean, vizual, sesiune: run.session });
   log("Gata:", cerere.titlu, `(${Math.round((Date.now() - started) / 1000)} s)`);
 }
@@ -1393,7 +1397,8 @@ function runChores(config) {
     if (config.pregatire !== false) await prepareMeetings(config);
     if (config.alerte !== false) await checkAlerts(config);
     if (config.raportLuni !== false) await weeklyReport(config);
-    if (config.echipaSeara !== false) await teamCoach(config);
+    // Rezumatul de seară al echipei e oprit implicit (Daniel, 28.10.2026: echipa raportează vineri–sâmbătă, vrea doar la cerere); „echipaSeara”: true îl pornește.
+    if (config.echipaSeara === true) await teamCoach(config);
     if (config.brief !== false) await morningBrief(config);
     if (config.sarcini !== false) await todoReminder(config).catch((error) => log("Reamintirea sarcinilor n-a mers:", error.message));
     if (config.rezumatSeara !== false) await eveningRecap(config).catch((error) => log("Rezumatul serii n-a mers:", error.message));
