@@ -55,6 +55,8 @@ const GREETING = {
   ro: "Salut, Daniel! Argus e aici. Cu ce rupem topurile azi?",
 };
 const greetingFor = (language: Language) => (language === "ro" ? GREETING.ro : GREETING.spoken);
+const GREETED_KEY = "argus-salutat-la";
+const GREET_EVERY_MS = 15 * 60 * 1000; // salută o dată la 15 minute; între timp ascultă direct
 const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
 
@@ -996,6 +998,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const lastSpotifyOpenRef = useRef<{ uri: string; piesa?: string } | null>(null); // Spotify adormit: ce deschidem direct
   const morningRef = useRef(false); // pornit cu ?dimineata=1: muzica se oprește cât vorbește cu Argus
   const [morningMusic, setMorningMusic] = useState("");
+  const [musicButton, setMusicButton] = useState(false); // Spotify a înghețat și iPhone-ul nu l-a lăsat deschis singur
   // Adresele pentru scurtăturile din iPhone: ?masina=1 pornește modul mașină, ?asculta=1 arată „atinge oriunde”.
   const [quickStart, setQuickStart] = useState(false);
   useEffect(() => {
@@ -1562,8 +1565,17 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     // Memoria vine cât Argus salută, nu înainte.
     const memory = fetchMemory();
     quietRef.current = 0;
-    log("agent", GREETING.ro);
-    await say(greetingFor(spokenLanguage()));
+    let greetedAt = 0;
+    try {
+      greetedAt = Number(localStorage.getItem(GREETED_KEY)) || 0;
+    } catch {}
+    if (Date.now() - greetedAt > GREET_EVERY_MS) {
+      try {
+        localStorage.setItem(GREETED_KEY, String(Date.now()));
+      } catch {}
+      log("agent", GREETING.ro);
+      await say(greetingFor(spokenLanguage()));
+    }
     historyRef.current = await memory;
     cleanRef.current = true;
     // Ce a venit cât a fost „nu mă deranja” (sau ce a notat serverul noaptea): se arată și se spune o singură dată, după salut.
@@ -1645,7 +1657,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "reia" }) })
         .then((response) => response.json())
         .then((data: { deschide?: string }) => {
-          if (data?.deschide && !activeRef.current && document.visibilityState === "visible") window.location.href = data.deschide;
+          if (!data?.deschide || activeRef.current || document.visibilityState !== "visible") return;
+          // iPhone-ul poate refuza deschiderea fără o atingere: rămâne și un buton, un minut.
+          setMusicButton(true);
+          setTimeout(() => setMusicButton(false), 60000);
+          window.location.href = data.deschide;
         })
         .catch(() => {});
     }
@@ -2243,6 +2259,18 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           <button type="button" className="connect connect-quiet" onClick={enablePush}>
             Pornește notificările
           </button>
+        )}
+        {musicButton && (
+          <a
+            className="connect"
+            href="spotify:"
+            onClick={() => {
+              setMusicButton(false);
+              void fetch("/api/spotify", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "reia" }) }).catch(() => {});
+            }}
+          >
+            Pornește muzica la loc
+          </a>
         )}
         {pushState === "denied" && <p className="hint">Notificările sunt oprite din setările telefonului.</p>}
         <div className="connect-row">
