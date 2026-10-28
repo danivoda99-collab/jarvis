@@ -1,9 +1,8 @@
 import { NextResponse, after } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { SpotifyError, spotifyClient, type SpotifyCall } from "@/lib/spotify";
+import { LIKED, SpotifyError, ownPlaylist, plain, spotifyClient, type SpotifyCall, type SpotifyItem as Item } from "@/lib/spotify";
 
 type Device = { id: string; name: string; type: string; is_active: boolean };
-type Item = { name: string; uri: string; artists?: { name: string }[]; owner?: { display_name?: string } };
 type Playing = { is_playing: boolean; item?: Item; device?: Device };
 
 const NO_DEVICE = "Nu văd niciun dispozitiv";
@@ -43,47 +42,6 @@ function playUntilPlaying(call: SpotifyCall) {
 }
 
 const TYPES = { melodie: "track", playlist: "playlist", artist: "artist", album: "album" } as const;
-
-// Fără diacritice și majuscule, ca „Dimineață” să se potrivească cu „dimineata”.
-function plain(text: string) {
-  return text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-const LIKED = /\b(favorit|apreciat|liked|preferat|melodiile mele|piesele mele|biblioteca)/;
-
-// Playlisturile lui Daniel (inclusiv cele private): întâi potrivirea exactă, apoi cea care conține ce a cerut.
-async function ownPlaylist(call: SpotifyCall, query: string, loose: boolean): Promise<Item | undefined> {
-  const wanted = plain(query).replace(/^playlist(ul)?\s+/, "");
-  const lists: Item[] = [];
-  for (let offset = 0; offset < 200; offset += 50) {
-    const { data } = await call<{ items: (Item | null)[]; next: string | null }>(`/me/playlists?limit=50&offset=${offset}`);
-    lists.push(...((data?.items ?? []).filter(Boolean) as Item[]));
-    if (!data?.next) break;
-  }
-  const exact = lists.find((item) => plain(item.name) === wanted);
-  if (exact) return exact;
-  // Numele playlistului conține ce a spus („chill” → „Chill seara”); invers doar când a cerut clar un playlist.
-  const contains = lists.find((item) => (wanted.length > 2 && plain(item.name).includes(wanted)) || (loose && wanted.length > 3 && wanted.includes(plain(item.name))));
-  if (contains) return contains;
-  // Altfel, cel cu cele mai multe cuvinte comune („every morning” → „Every morning, every day”), cel puțin jumătate.
-  const words = new Set(wanted.split(" ").filter((word) => word.length > 1));
-  let best: Item | undefined;
-  let bestScore = 0;
-  for (const item of lists) {
-    const name = new Set(plain(item.name).split(" "));
-    const score = [...words].filter((word) => name.has(word)).length / Math.max(1, words.size);
-    if (score > bestScore) {
-      best = item;
-      bestScore = score;
-    }
-  }
-  return bestScore >= 0.5 && (loose || bestScore === 1) ? best : undefined;
-}
 
 function describe(item?: Item) {
   if (!item) return "";

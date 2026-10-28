@@ -1111,6 +1111,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   // Cifrele mici din jurul sferei; se reîmprospătează la 5 minute și când revii în aplicație.
   const [panou, setPanou] = useState<Panou | null>(null);
   const [teamPick, setTeamPick] = useState(false);
+  const [morningLink, setMorningLink] = useState("");
   const panouReloadRef = useRef<() => void>(() => {});
   useEffect(() => {
     let stopped = false;
@@ -2091,6 +2092,32 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
                   }
                 }}
               />
+            </dd>
+          </div>
+          <div>
+            <dt>Link Scurtături</dt>
+            <dd>
+              <button
+                type="button"
+                className="voice"
+                title="Pentru automatizarea de dimineață: acțiunea Play din Spotify, apoi „Obține conținutul URL-ului” cu acest link. Merge și cu telefonul blocat."
+                onClick={() => {
+                  fetch("/api/spotify/dimineata", { cache: "no-store" })
+                    .then((response) => (response.ok ? response.json() : null))
+                    .then((data: { link?: string } | null) => {
+                      if (!data?.link) throw new Error();
+                      const link = data.link + encodeURIComponent(morningMusic.trim());
+                      return navigator.clipboard.writeText(link).then(
+                        () => setMorningLink("Copiat"),
+                        () => setMorningLink(link),
+                      );
+                    })
+                    .catch(() => setMorningLink("Nu merge acum"));
+                }}
+              >
+                {morningLink && morningLink.length < 20 ? morningLink : "Copiază linkul"}
+              </button>
+              {morningLink.length >= 20 && <span className="hint" style={{ wordBreak: "break-all", userSelect: "all" }}>{morningLink}</span>}
             </dd>
           </div>
           <div>

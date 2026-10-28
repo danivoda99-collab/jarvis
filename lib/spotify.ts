@@ -1,4 +1,6 @@
+import { createHmac } from "node:crypto";
 import { cookies } from "next/headers";
+import { command } from "@/lib/cereri";
 import { openToken, sealToken } from "@/lib/google";
 
 // Spotify (ales de Daniel pe 19.10.2026): pornește, oprește și schimbă muzica pe telefonul sau laptopul lui, prin contul Premium.
@@ -43,9 +45,32 @@ export async function spotifyConnected(): Promise<boolean> {
 
 export class SpotifyError extends Error {}
 
-async function accessToken(): Promise<string> {
+// O copie criptată a conexiunii stă și în Redis, ca linkul de dimineață din Scurtături (fără cookie) să poată porni muzica.
+const SHARED_TOKEN = "argus:spotify";
+let sharedSaved = "";
+
+async function refreshToken(): Promise<string | null> {
   const sealed = (await cookies()).get(SPOTIFY_COOKIE)?.value;
-  const refresh = sealed ? openToken(sealed) : null;
+  const own = sealed ? openToken(sealed) : null;
+  if (own && sealed) {
+    if (sharedSaved !== sealed) {
+      await command("SET", SHARED_TOKEN, sealed)
+        .then(() => (sharedSaved = sealed))
+        .catch(() => undefined);
+    }
+    return own;
+  }
+  const shared = await command<string | null>("GET", SHARED_TOKEN).catch(() => null);
+  return shared ? openToken(shared) : null;
+}
+
+// Cheia din linkul de dimineață: derivată din SESSION_SECRET, o vede doar Daniel în Setări.
+export function morningKey(): string {
+  return createHmac("sha256", process.env.SESSION_SECRET ?? "").update("argus-dimineata").digest("hex").slice(0, 32);
+}
+
+async function accessToken(): Promise<string> {
+  const refresh = await refreshToken();
   if (!refresh) throw new SpotifyError("Spotify nu e conectat. Daniel trebuie să apese „Conectează Spotify” în aplicație.");
   const { access_token: token } = await tokenRequest({ grant_type: "refresh_token", refresh_token: refresh });
   if (!token) throw new SpotifyError("Conexiunea cu Spotify a expirat. Daniel trebuie să apese din nou „Conectează Spotify”.");
@@ -73,3 +98,48 @@ export async function spotifyClient(): Promise<SpotifyCall> {
     return { status: response.status, data };
   };
 }
+
+type Item = { name: string; uri: string; artists?: { name: string }[]; owner?: { display_name?: string } };
+export type { Item as SpotifyItem };
+
+// Fără diacritice și majuscule, ca „Dimineață” să se potrivească cu „dimineata”.
+export function plain(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export const LIKED = /\b(favorit|apreciat|liked|preferat|melodiile mele|piesele mele|biblioteca)/;
+
+// Playlisturile lui Daniel (inclusiv cele private): întâi potrivirea exactă, apoi cea care conține ce a cerut.
+export async function ownPlaylist(call: SpotifyCall, query: string, loose: boolean): Promise<Item | undefined> {
+  const wanted = plain(query).replace(/^playlist(ul)?\s+/, "");
+  const lists: Item[] = [];
+  for (let offset = 0; offset < 200; offset += 50) {
+    const { data } = await call<{ items: (Item | null)[]; next: string | null }>(`/me/playlists?limit=50&offset=${offset}`);
+    lists.push(...((data?.items ?? []).filter(Boolean) as Item[]));
+    if (!data?.next) break;
+  }
+  const exact = lists.find((item) => plain(item.name) === wanted);
+  if (exact) return exact;
+  // Numele playlistului conține ce a spus („chill” → „Chill seara”); invers doar când a cerut clar un playlist.
+  const contains = lists.find((item) => (wanted.length > 2 && plain(item.name).includes(wanted)) || (loose && wanted.length > 3 && wanted.includes(plain(item.name))));
+  if (contains) return contains;
+  // Altfel, cel cu cele mai multe cuvinte comune („every morning” → „Every morning, every day”), cel puțin jumătate.
+  const words = new Set(wanted.split(" ").filter((word) => word.length > 1));
+  let best: Item | undefined;
+  let bestScore = 0;
+  for (const item of lists) {
+    const name = new Set(plain(item.name).split(" "));
+    const score = [...words].filter((word) => name.has(word)).length / Math.max(1, words.size);
+    if (score > bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 0.5 && (loose || bestScore === 1) ? best : undefined;
+}
+
