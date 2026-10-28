@@ -442,6 +442,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       const data = (await response.json()) as { ok?: boolean; error?: string; deschide?: string; piesa?: string };
       if (path === "/api/spotify" && data.deschide) lastSpotifyOpenRef.current = { uri: data.deschide, piesa: data.piesa };
       if (!response.ok) return `Eroare: ${data.error ?? response.status}`;
+      // După o schimbare în to-do, buget sau agendă, cifrele din jurul sferei se iau din nou, nu la 5 minute.
+      if (method !== "GET" && /^\/api\/(sarcini|buget|agenda)/.test(path)) setTimeout(() => panouReloadRef.current(), 600);
       return data.ok && Object.keys(data).length === 1 ? "Gata, făcut." : JSON.stringify(data);
     } catch {
       return "Eroare: nu am putut ajunge la server.";
@@ -1102,6 +1104,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [laptopOff, setLaptopOff] = useState<number | null>(null);
   // Cifrele mici din jurul sferei; se reîmprospătează la 5 minute și când revii în aplicație.
   const [panou, setPanou] = useState<Panou | null>(null);
+  const panouReloadRef = useRef<() => void>(() => {});
   useEffect(() => {
     let stopped = false;
     const load = () => {
@@ -1113,6 +1116,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         })
         .catch(() => {});
     };
+    panouReloadRef.current = load;
     load();
     const timer = setInterval(load, 5 * 60_000);
     document.addEventListener("visibilitychange", load);
