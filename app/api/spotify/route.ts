@@ -163,8 +163,9 @@ export async function POST(request: Request) {
       // După conversație: muzica pornește la loc; dacă iPhone-ul a adormit Spotify, mai încearcă câteva secunde, fără să-l deschidă.
       error = await onDevice(call, "/me/player/play", { method: "PUT" });
       if (error?.startsWith(NO_DEVICE)) {
+        // Telefonul deschide Spotify doar la finalul conversației; în așteptare (mașină) rămâne în Argus.
         playWhenAwake(call, null);
-        error = null;
+        return NextResponse.json({ ok: true, text: "Pornesc muzica de îndată ce se trezește Spotify.", deschide: "spotify:" });
       }
       text = "Am pornit muzica la loc.";
     } else if (action === "pauza_daca_canta") {
