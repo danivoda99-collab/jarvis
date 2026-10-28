@@ -33,12 +33,13 @@ async function budget() {
   const { luna, tabel, venit } = await situation();
   const m = budgetMoney(tabel, venit);
   if (!m.budget) return null;
-  // Liber după plăți: venit − cheltuit − ce mai e de plătit din buget (fără venit, doar ce mai e de plătit).
+  // Bani: venit − cheltuit, cât ar trebui să fie în cont (îl compară cu banca). Liber: după ce mai e de plătit din buget.
   return {
     luna,
     procent: Math.round((m.spent / m.budget) * 100),
     ramas: Math.round(m.budget - m.spent),
     liber: m.free === null ? undefined : Math.round(m.free),
+    bani: m.money === null ? undefined : Math.round(m.money),
     deplata: Math.round(m.toPay),
   };
 }

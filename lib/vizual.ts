@@ -163,9 +163,9 @@ export function budgetVizual(table: string[][], venit?: string): Vizual | undefi
     ? undefined
     : m.income !== null && m.money !== null && m.free !== null
       ? [
+          { eticheta: "Bani rămași", valoare: lei(m.money), nota: "compară cu banca" },
           { eticheta: "Venit", valoare: lei(m.income) },
           { eticheta: "Cheltuit", valoare: lei(m.spent) },
-          { eticheta: "Bani rămași", valoare: lei(m.money), nota: "venit − cheltuit" },
           { eticheta: "De plătit din buget", valoare: lei(m.toPay) },
           { eticheta: "Liber după plăți", valoare: lei(m.free) },
           ...(m.over ? [{ eticheta: "Peste buget", valoare: lei(m.over) }] : []),

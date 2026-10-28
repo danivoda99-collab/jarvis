@@ -74,7 +74,7 @@ function spokenPart(text: string): { body: string; closed: boolean } | null {
 
 type Panou = {
   intalnire: { titlu: string; inceput: string } | null;
-  buget: { procent: number; ramas: number; liber?: number; deplata?: number } | null;
+  buget: { procent: number; ramas: number; liber?: number; deplata?: number; bani?: number } | null;
   sarcini: { ramase: number; azi: number } | null;
   echipa: { raportat: number; total: number; subTel?: number; analize?: number; tel?: number; actualizat: string } | null;
 };
@@ -2180,8 +2180,8 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
               <span className="stat-label">Buget</span>
               <span className="stat-value">{panou.buget ? `${panou.buget.procent}%` : "—"}</span>
               <span className="stat-sub">{panou.buget
-                  ? panou.buget.liber !== undefined
-                    ? `liber ${panou.buget.liber.toLocaleString("ro-RO")} lei`
+                  ? panou.buget.bani !== undefined
+                    ? `ai ${panou.buget.bani.toLocaleString("ro-RO")} lei`
                     : `de plătit ${(panou.buget.deplata ?? panou.buget.ramas).toLocaleString("ro-RO")} lei`
                   : "nu am acces"}</span>
               {panou.buget && <span className="stat-bar"><i style={{ width: `${Math.min(100, panou.buget.procent)}%` }} /></span>}
