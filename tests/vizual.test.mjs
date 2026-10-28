@@ -1,7 +1,7 @@
 // Teste rapide pentru ce vine de la model sau din Sheet: „npm run check”.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { amount, cleanVizual } from "../lib/vizual.ts";
+import { amount, budgetVizual, cleanVizual, unbudgeted } from "../lib/vizual.ts";
 
 test("sume în orice format din Sheet", () => {
   assert.equal(amount("1,100.00"), 1100);
@@ -31,4 +31,20 @@ test("nivel necunoscut devine info, imagini doar https", () => {
   assert.equal(vizual.puncte[0].nivel, "info");
   assert.equal(vizual.imagine, undefined);
   assert.equal(cleanVizual({}), undefined);
+});
+
+test("bugetul arată toate categoriile și ce e fără buget", () => {
+  const table = [
+    ["Categorie", "Buget", "Cheltuit", "Rămas", "%"],
+    ...Array.from({ length: 15 }, (_, i) => [`C${i}`, "1,000", "500", "500", "50%"]),
+    ["Ieșiri", "500", "715", "-215", "143%"],
+    ["Altele", "0", "1,561", "-1,561"],
+    ["Total", "16,500", "10,276", "5,724", "62%"],
+  ];
+  const vizual = budgetVizual(table);
+  assert.equal(vizual.progres.length, 16);
+  const cifre = Object.fromEntries(vizual.cifre.map((c) => [c.eticheta, c.valoare]));
+  assert.equal(cifre["Mai ai în categorii"], `${(7500).toLocaleString("ro-RO")} lei`);
+  assert.equal(cifre["Peste buget"], `${(1776).toLocaleString("ro-RO")} lei`);
+  assert.deepEqual(unbudgeted(table), [["Fără buget", "Cheltuit"], ["Altele", "1,561 lei"]]);
 });

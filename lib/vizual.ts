@@ -64,7 +64,7 @@ export function cleanVizual(input: unknown): Vizual | undefined {
   if (cifre.length) result.cifre = cifre;
 
   const progres: Progres[] = [];
-  for (const item of list(raw.progres, 12).map(record)) {
+  for (const item of list(raw.progres, 30).map(record)) {
     const eticheta = text(item.eticheta, 40);
     const valoare = number(item.valoare);
     const maxim = number(item.maxim);
@@ -134,28 +134,44 @@ export function amount(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-// Situația bugetului (Categorie, Buget, Cheltuit, Rămas, %) ca bare de progres și cifre mari.
+// Situația bugetului (Categorie, Buget, Cheltuit, Rămas, %): cifre mari și bare pentru toate categoriile cu buget.
+// „Rămas” din Total e net (scade și depășirile), așa că arătăm separat cât mai e în categorii și cât s-a depășit.
 export function budgetVizual(table: string[][]): Vizual | undefined {
   const rows = table.slice(1);
   const parse = (value: string) => amount(value);
   const total = rows.find((row) => row[0] === "Total");
-  const progres = rows
-    .filter((row) => row[0] !== "Total")
+  const categories = rows.filter((row) => row[0] !== "Total");
+  const progres = categories
     .map((row) => ({ eticheta: row[0], valoare: parse(row[2]) ?? 0, maxim: parse(row[1]) ?? 0, unitate: "lei" }))
     .filter((item) => item.maxim > 0)
     .sort((a, b) => b.valoare / b.maxim - a.valoare / a.maxim);
-  const lei = (value: string) => {
+  const left = categories.map((row) => parse(row[3]) ?? 0);
+  const lei = (value: number) => `${value.toLocaleString("ro-RO", { maximumFractionDigits: 2 })} lei`;
+  const fromCell = (value: string) => {
     const parsed = parse(value);
-    return parsed === null ? `${value} lei` : `${parsed.toLocaleString("ro-RO", { maximumFractionDigits: 2 })} lei`;
+    return parsed === null ? `${value} lei` : lei(parsed);
   };
+  const free = left.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
+  const over = -left.filter((value) => value < 0).reduce((sum, value) => sum + value, 0);
   const cifre = total
     ? [
-        { eticheta: "Cheltuit", valoare: lei(total[2]) },
-        { eticheta: "Buget", valoare: lei(total[1]) },
-        { eticheta: "Rămas", valoare: lei(total[3]) },
+        { eticheta: "Cheltuit", valoare: fromCell(total[2]) },
+        { eticheta: "Buget", valoare: fromCell(total[1]) },
+        { eticheta: "Rămas net", valoare: fromCell(total[3]), nota: over ? "după depășiri" : undefined },
+        { eticheta: "Mai ai în categorii", valoare: lei(free) },
+        ...(over ? [{ eticheta: "Peste buget", valoare: lei(over) }] : []),
       ]
     : undefined;
   return cleanVizual({ cifre, progres });
+}
+
+// Cheltuielile din categoriile fără buget nu au bară: le arătăm într-un tabel sub bare.
+export function unbudgeted(table: string[][]): string[][] | undefined {
+  const rows = table
+    .slice(1)
+    .filter((row) => row[0] !== "Total" && !(amount(row[1]) ?? 0) && (amount(row[2]) ?? 0) > 0)
+    .map((row) => [row[0], `${row[2]} lei`]);
+  return rows.length ? [["Fără buget", "Cheltuit"], ...rows] : undefined;
 }
 
 // Rezerva pentru un rezultat de pe laptop venit fără VIZUAL (punte veche sau model neatent): liniile „- Nume: ce vrea”

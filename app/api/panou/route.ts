@@ -35,7 +35,12 @@ async function budget() {
   const spent = amount(total?.[2]);
   const planned = amount(total?.[1]);
   if (spent === null || !planned) return null;
-  return { luna, procent: Math.round((spent / planned) * 100), ramas: Math.round(planned - spent) };
+  // Cât mai e în categoriile care nu s-au terminat; totalul net scade și depășirile din alte categorii.
+  const free = tabel
+    .slice(1)
+    .filter((row) => row[0] !== "Total")
+    .reduce((sum, row) => sum + Math.max(0, amount(row[3]) ?? 0), 0);
+  return { luna, procent: Math.round((spent / planned) * 100), ramas: Math.round(planned - spent), liber: Math.round(free) };
 }
 
 async function tasks() {
