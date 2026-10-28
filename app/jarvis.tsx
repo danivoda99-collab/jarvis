@@ -8,7 +8,7 @@ import Orb, { type Module, type OrbHandle } from "./orb";
 import WindowLinks from "./links";
 import { blipSound, bootSound } from "./sounds";
 import type { Cerere } from "@/lib/cereri";
-import { budgetVizual, cleanVizual, pointsFromText } from "@/lib/vizual";
+import { budgetVizual, cleanVizual, pointsFromText, unbudgeted } from "@/lib/vizual";
 import {
   canListen,
   chooseVoice,
@@ -74,7 +74,7 @@ function spokenPart(text: string): { body: string; closed: boolean } | null {
 
 type Panou = {
   intalnire: { titlu: string; inceput: string } | null;
-  buget: { procent: number; ramas: number } | null;
+  buget: { procent: number; ramas: number; liber?: number } | null;
   sarcini: { ramase: number; azi: number } | null;
   echipa: { raportat: number; total: number; subTel?: number; analize?: number; tel?: number; actualizat: string } | null;
 };
@@ -718,18 +718,18 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       if (raw.startsWith("Eroare")) return raw;
       const data = JSON.parse(raw) as { luna?: string; tabel?: string[][] };
       if (data.tabel && data.tabel.length > 1) {
-        // Bare de progres pe fiecare categorie (cele aproape de limită sus); tabelul doar dacă nu se pot citi cifrele.
+        // Bare pentru toate categoriile cu buget (cele aproape de limită sus), apoi cheltuielile fără buget; tabelul întreg doar dacă nu se pot citi cifrele.
         const vizual = budgetVizual(data.tabel);
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
           title: `Buget ${data.luna ?? ""}`.trim(),
           vizual,
-          table: vizual ? undefined : data.tabel,
+          table: vizual ? unbudgeted(data.tabel) : data.tabel,
           module: "buget",
         });
       }
-      return `${raw}\nBarele de progres sunt pe ecran. Spune pe scurt totalul și ce categorii au depășit bugetul.`;
+      return `${raw}\nBarele de progres sunt pe ecran, cu toate categoriile. Spune pe scurt totalul, cât mai are în categorii și ce categorii au depășit bugetul. „Rămas” din Total e net, după depășiri.`;
     },
     buget_adauga: async (parameters: { suma?: unknown; categorie?: unknown; nota?: unknown; data?: unknown }) => {
       const amount = String(parameters.suma ?? "").trim();
@@ -2179,7 +2179,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
             <button type="button" className={`stat right${panou.buget && panou.buget.procent >= 90 ? " warn" : ""}`} onClick={() => askFromTile("Cum stau cu bugetul luna asta?")} disabled={!panou.buget}>
               <span className="stat-label">Buget</span>
               <span className="stat-value">{panou.buget ? `${panou.buget.procent}%` : "—"}</span>
-              <span className="stat-sub">{panou.buget ? `rămas ${panou.buget.ramas.toLocaleString("ro-RO")} lei` : "nu am acces"}</span>
+              <span className="stat-sub">{panou.buget ? `mai ai ${(panou.buget.liber ?? panou.buget.ramas).toLocaleString("ro-RO")} lei` : "nu am acces"}</span>
               {panou.buget && <span className="stat-bar"><i style={{ width: `${Math.min(100, panou.buget.procent)}%` }} /></span>}
             </button>
           </div>

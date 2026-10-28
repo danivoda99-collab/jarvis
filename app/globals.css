@@ -1112,9 +1112,13 @@ body {
 
 .viz-progress {
   list-style: none;
-  padding: 0;
+  padding: 0 4px 0 0;
   display: grid;
   gap: 9px;
+  /* Bugetul are multe categorii: lista se derulează în fereastră. */
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .viz-progress-head {
