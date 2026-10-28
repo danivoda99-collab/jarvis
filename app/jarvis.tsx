@@ -659,7 +659,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         valoare: typeof parameters.valoare === "number" ? parameters.valoare : undefined,
       });
       if (action === "pune" && !raw.startsWith("Eroare")) musicOnRef.current = true;
-      if (action === "pune" && lastSpotifyOpenRef.current) {
+      if (lastSpotifyOpenRef.current) {
         // Spotify „adormit” pe iPhone: îl deschidem direct pe ce s-a cerut; conversația se închide după răspuns.
         // Conversația se închide acum, fără să mai vorbească: altfel, la întoarcerea în Argus, ar vorbi și ar opri muzica.
         const { uri, piesa } = lastSpotifyOpenRef.current;
@@ -1700,6 +1700,25 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       void lock?.release().catch(() => {});
     };
   }, [driving, googleConnected]);
+
+  // Cât e Argus deschis pe ecran, ecranul nu se stinge (Daniel îl ține pornit lângă el). Se cere din nou la întoarcere.
+  useEffect(() => {
+    let lock: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+    const keepOn = () => {
+      if (document.visibilityState !== "visible" || !nav.wakeLock) return;
+      nav.wakeLock
+        .request("screen")
+        .then((sentinel) => (lock = sentinel))
+        .catch(() => {});
+    };
+    keepOn();
+    document.addEventListener("visibilitychange", keepOn);
+    return () => {
+      document.removeEventListener("visibilitychange", keepOn);
+      void lock?.release().catch(() => {});
+    };
+  }, []);
 
   // Cu 15 minute înainte de o întâlnire, Argus o spune o dată, dacă ascultă în acel moment.
   useEffect(() => {

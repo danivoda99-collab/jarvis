@@ -12,15 +12,15 @@ export const maxDuration = 60;
 
 // Spotify „adormit” pe iPhone: telefonul îl deschide, iar serverul așteaptă să apară ca dispozitiv (cel mult ~25 s)
 // și pornește singur ce s-a cerut, ca Daniel doar să se întoarcă în Argus.
-function playWhenAwake(call: SpotifyCall, payload: Record<string, unknown> | null) {
+function playWhenAwake(call: SpotifyCall, payload: Record<string, unknown> | null, path = "/me/player/play", method = "PUT") {
   after(async () => {
     for (let tries = 0; tries < 17; tries += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       const { data } = await call<{ devices: Device[] }>("/me/player/devices");
       const device = data?.devices?.find((item) => item.type === "Smartphone") ?? data?.devices?.[0];
       if (!device) continue;
-      await call(`/me/player/play?device_id=${encodeURIComponent(device.id)}`, {
-        method: "PUT",
+      await call(`${path}?device_id=${encodeURIComponent(device.id)}`, {
+        method,
         body: payload ? JSON.stringify(payload) : undefined,
       });
       return;
@@ -178,7 +178,13 @@ export async function POST(request: Request) {
       error = await onDevice(call, "/me/player/pause", { method: "PUT" });
       text = "Am oprit muzica.";
     } else if (action === "urmatoarea" || action === "anterioara") {
-      error = await onDevice(call, `/me/player/${action === "urmatoarea" ? "next" : "previous"}`, { method: "POST" });
+      const path = `/me/player/${action === "urmatoarea" ? "next" : "previous"}`;
+      error = await onDevice(call, path, { method: "POST" });
+      // iPhone-ul a „adormit” Spotify: îl deschidem și, când apare, pornim muzica și trecem la piesa cerută.
+      if (error?.startsWith(NO_DEVICE)) {
+        playWhenAwake(call, null, path, "POST");
+        return NextResponse.json({ error, deschide: "spotify:" }, { status: 502 });
+      }
       text = action === "urmatoarea" ? "Am trecut la următoarea." : "Am pus-o pe cea dinainte.";
     } else if (action === "volum") {
       const volume = Math.max(0, Math.min(100, Math.round(Number(body.valoare ?? 50))));
