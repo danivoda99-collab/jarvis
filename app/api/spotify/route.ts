@@ -28,6 +28,20 @@ function playWhenAwake(call: SpotifyCall, payload: Record<string, unknown> | nul
   });
 }
 
+// După conversație iPhone-ul poate lăsa Spotify „înghețat”: comanda trece, dar nu cântă. Tot încercăm până cântă (~25 s).
+function playUntilPlaying(call: SpotifyCall) {
+  after(async () => {
+    for (let tries = 0; tries < 17; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const { data: now } = await call<Playing>("/me/player");
+      if (now?.is_playing) return;
+      const { data } = await call<{ devices: Device[] }>("/me/player/devices");
+      const device = data?.devices?.find((item) => item.type === "Smartphone") ?? data?.devices?.[0];
+      if (device) await call(`/me/player/play?device_id=${encodeURIComponent(device.id)}`, { method: "PUT" });
+    }
+  });
+}
+
 const TYPES = { melodie: "track", playlist: "playlist", artist: "artist", album: "album" } as const;
 
 // Fără diacritice și majuscule, ca „Dimineață” să se potrivească cu „dimineata”.
@@ -162,9 +176,14 @@ export async function POST(request: Request) {
     } else if (action === "reia") {
       // După conversație: muzica pornește la loc; dacă iPhone-ul a adormit Spotify, mai încearcă câteva secunde, fără să-l deschidă.
       error = await onDevice(call, "/me/player/play", { method: "PUT" });
+      if (!error) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const { data } = await call<Playing>("/me/player");
+        if (!data?.is_playing) error = NO_DEVICE;
+      }
       if (error?.startsWith(NO_DEVICE)) {
         // Telefonul deschide Spotify doar la finalul conversației; în așteptare (mașină) rămâne în Argus.
-        playWhenAwake(call, null);
+        playUntilPlaying(call);
         return NextResponse.json({ ok: true, text: "Pornesc muzica de îndată ce se trezește Spotify.", deschide: "spotify:" });
       }
       text = "Am pornit muzica la loc.";
