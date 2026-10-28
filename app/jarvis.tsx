@@ -992,6 +992,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const musicPausedRef = useRef(false); // Argus a oprit Spotify la începutul conversației din mașină
   const drivingRef = useRef(false);
   const musicOnRef = useRef(false); // în runda asta Argus a pornit muzica
+  const musicSeenRef = useRef({ canta: false, at: 0 }); // ultima dată când am văzut, din pagină, dacă merge muzica
   const lastSpotifyOpenRef = useRef<{ uri: string; piesa?: string } | null>(null); // Spotify adormit: ce deschidem direct
   const morningRef = useRef(false); // pornit cu ?dimineata=1: muzica se oprește cât vorbește cu Argus
   const [morningMusic, setMorningMusic] = useState("");
@@ -1541,7 +1542,9 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     // Cât vorbește cu Argus, muzica ia pauză și pornește la loc la final. Cerem pauza înainte de microfon:
     // pe iPhone microfonul o oprește oricum, iar după aceea Spotify n-ar mai ști că a cântat.
     if (spotifyConnected) {
-      musicPausedRef.current = false;
+      // Cânta acum câteva secunde: o pornim la loc la final chiar dacă iPhone-ul a oprit-o deja la atingere.
+      const seen = musicSeenRef.current;
+      musicPausedRef.current = seen.canta && Date.now() - seen.at < 40000;
       pauseMusic();
     }
     primeSpeech();
@@ -1638,7 +1641,13 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     setStandby(false);
     if (musicPausedRef.current) {
       musicPausedRef.current = false;
-      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "reia" }) }).catch(() => {});
+      // Dacă iPhone-ul a adormit Spotify cât am vorbit, îl deschidem; serverul pornește muzica de îndată ce apare.
+      void fetch("/api/spotify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actiune: "reia" }) })
+        .then((response) => response.json())
+        .then((data: { deschide?: string }) => {
+          if (data?.deschide && !activeRef.current && document.visibilityState === "visible") window.location.href = data.deschide;
+        })
+        .catch(() => {});
     }
     activeRef.current = false;
     stopListening();
@@ -1719,6 +1728,29 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       void lock?.release().catch(() => {});
     };
   }, []);
+
+  // Cât Argus doar stă deschis, ține minte dacă merge muzica. Pe iPhone, atingerea „Vorbește” oprește Spotify înainte
+  // ca serverul să apuce să vadă că a cântat; așa știm totuși să o pornim la loc după conversație.
+  useEffect(() => {
+    if (!spotifyConnected) return;
+    const check = () => {
+      if (document.visibilityState !== "visible" || activeRef.current) return;
+      void fetch("/api/spotify")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { canta?: boolean } | null) => {
+          if (data && !activeRef.current) musicSeenRef.current = { canta: Boolean(data.canta), at: Date.now() };
+        })
+        .catch(() => {});
+    };
+    check();
+    const timer = setInterval(check, 15000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotifyConnected]);
 
   // Cu 15 minute înainte de o întâlnire, Argus o spune o dată, dacă ascultă în acel moment.
   useEffect(() => {
