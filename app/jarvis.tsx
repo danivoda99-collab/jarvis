@@ -1721,10 +1721,28 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         .then((sentinel) => (lock = sentinel))
         .catch(() => {});
     };
-    keepOn();
-    document.addEventListener("visibilitychange", keepOn);
+    // iPhone-ul refuză uneori cererea fără o atingere sau n-o știe deloc în aplicația de pe ecran: la fiecare atingere
+    // o mai cerem o dată și pornim și un clip negru, mut, în buclă, care ține ecranul aprins fără să atingă muzica.
+    const video = document.createElement("video");
+    video.src = "/treaz.mp4";
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("aria-hidden", "true");
+    video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0.01;pointer-events:none;left:0;top:0;";
+    document.body.appendChild(video);
+    const onTouch = () => {
+      keepOn();
+      if (video.paused) void video.play().catch(() => {});
+    };
+    onTouch();
+    document.addEventListener("visibilitychange", onTouch);
+    document.addEventListener("pointerdown", onTouch);
     return () => {
-      document.removeEventListener("visibilitychange", keepOn);
+      document.removeEventListener("visibilitychange", onTouch);
+      document.removeEventListener("pointerdown", onTouch);
+      video.remove();
       void lock?.release().catch(() => {});
     };
   }, []);
