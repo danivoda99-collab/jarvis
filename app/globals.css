@@ -2090,3 +2090,29 @@ body:has(.console) {
 .center .orb-slot + .stats {
   margin-top: -44px;
 }
+
+.team-pick {
+  width: min(100%, 520px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.team-pick button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(212, 166, 74, 0.32);
+  border-radius: 10px;
+  background: rgba(23, 23, 26, 0.7);
+  color: var(--ivory);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.team-pick button:focus-visible {
+  outline: 2px solid var(--flame);
+  outline-offset: 2px;
+}

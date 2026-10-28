@@ -57,6 +57,12 @@ const GREETING = {
 const greetingFor = (language: Language) => (language === "ro" ? GREETING.ro : GREETING.spoken);
 const GREETED_KEY = "argus-salutat-la";
 const GREET_EVERY_MS = 15 * 60 * 1000; // salută o dată la 15 minute; între timp ascultă direct
+// Iconița Echipa: Daniel alege ce vede din ultima săptămână încheiată (sâmbătă–vineri); nimic nu vine zilnic.
+const TEAM_VIEWS = [
+  { label: "Tel party", ask: "Raport echipă, Tel party pe ultima săptămână încheiată: activitatea fiecăruia față de tel." },
+  { label: "Închideri", ask: "Raport echipă, închideri pe ultima săptămână încheiată: semnate și plătite, pe fiecare." },
+  { label: "Amândouă", ask: "Raport echipă pe ultima săptămână încheiată: Tel party față de tel și închiderile, pe fiecare." },
+];
 const VOICE_CHECK = { en: "Voice check. Argus online.", ro: "Test de voce. Argus e aici." };
 const MAX_MESSAGES = 80; // peste atât, conversația o ia de la capăt
 
@@ -1104,6 +1110,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [laptopOff, setLaptopOff] = useState<number | null>(null);
   // Cifrele mici din jurul sferei; se reîmprospătează la 5 minute și când revii în aplicație.
   const [panou, setPanou] = useState<Panou | null>(null);
+  const [teamPick, setTeamPick] = useState(false);
   const panouReloadRef = useRef<() => void>(() => {});
   useEffect(() => {
     let stopped = false;
@@ -2209,7 +2216,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         </div>
         {panou && (
           <div className="stats">
-            <button type="button" className="stat" onClick={() => askFromTile("Cum stă echipa săptămâna asta?")} disabled={!panou.echipa}>
+            <button type="button" className="stat" onClick={() => setTeamPick((open) => !open)} aria-expanded={teamPick}>
               <span className="stat-label">Echipa</span>
               <span className="stat-value">{panou.echipa ? `${panou.echipa.raportat}/${panou.echipa.total}` : "—"}</span>
               <span className="stat-sub">
@@ -2217,7 +2224,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
                   ? panou.echipa.analize !== undefined && panou.echipa.tel
                     ? `${panou.echipa.analize}/${panou.echipa.tel} analize`
                     : "au raportat"
-                  : "vine diseară"}
+                  : "apasă și alegi"}
               </span>
               {panou.echipa?.analize !== undefined && panou.echipa.tel ? (
                 <span className="stat-bar"><i style={{ width: `${Math.min(100, Math.round((panou.echipa.analize / panou.echipa.tel) * 100))}%` }} /></span>
@@ -2228,6 +2235,15 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
               <span className="stat-value">{panou.sarcini ? panou.sarcini.ramase : "—"}</span>
               <span className="stat-sub">{panou.sarcini ? (panou.sarcini.azi ? `${panou.sarcini.azi} pentru azi` : "nimic azi") : "nu am acces"}</span>
             </button>
+          </div>
+        )}
+        {teamPick && (
+          <div className="team-pick" role="group" aria-label="Ce vrei să vezi la echipă">
+            {TEAM_VIEWS.map((view) => (
+              <button key={view.label} type="button" onClick={() => { setTeamPick(false); askFromTile(view.ask); }}>
+                {view.label}
+              </button>
+            ))}
           </div>
         )}
         <p className="status">{label}</p>
