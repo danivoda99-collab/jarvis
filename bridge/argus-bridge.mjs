@@ -1127,8 +1127,9 @@ async function morningBrief(config) {
 // ——— Reamintirea to-do-urilor: de două ori pe zi (implicit 12 și 17, „sarciniOre” în config.json), sarcinile rămase,
 // cu „Gata” și „Mâine” pe fiecare, pe telefon. Doar dacă e ceva scadent azi, întârziat sau fără dată.
 // Nu la 10, ca să nu vină odată cu brief-ul. ———
-// ——— Muzica de dimineață: la 9:30 (config „muzicaOra”: "09:30"), o dată pe zi, laptopul cere serverului să pornească
-// playlistul pe Spotify (telefonul, altfel laptopul). iOS nu lasă automatizările să pornească Spotify cu telefonul blocat. ———
+// ——— Muzica de dimineață: la 9:30 (config „muzicaOra”: "09:30"), o dată pe zi, laptopul își deschide Spotify-ul și cere
+// serverului să pornească playlistul pe el („muzicaUnde”: "telefon" îl trimite pe iPhone, dacă Spotify a rămas treaz acolo).
+// iOS nu lasă automatizările să pornească Spotify cu telefonul blocat, de aceea pe laptop. ———
 const MUSIC_FILE = join(HERE, "muzica-dimineata.json");
 
 async function morningMusic(config) {
@@ -1143,8 +1144,14 @@ async function morningMusic(config) {
   if (state.facut === today.date || Date.now() - (state.incercat || 0) < 4 * 60_000) return;
   state.incercat = Date.now();
   writeFileSync(MUSIC_FILE, JSON.stringify(state, null, 2));
+  const where = config.muzicaUnde === "telefon" ? "telefon" : "laptop";
+  if (where === "laptop" && process.platform === "win32") {
+    // Deschide aplicația Spotify (sau o aduce în față); apare ca dispozitiv după câteva secunde.
+    spawn("cmd", ["/c", "start", "", "spotify:"], { windowsHide: true, detached: true, stdio: "ignore" }).unref();
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
+  }
   try {
-    const result = await api(config, "POST", { porneste: true }, "", "/api/spotify/dimineata");
+    const result = await api(config, "POST", { porneste: true, unde: where }, "", "/api/spotify/dimineata");
     state.facut = today.date;
     log("Muzica de dimineață:", result.text || "pornită");
   } catch (error) {
