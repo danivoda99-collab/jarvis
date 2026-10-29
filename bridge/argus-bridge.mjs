@@ -1401,7 +1401,8 @@ async function selfUpdate(config) {
     if (!cod || createHash("sha256").update(cod).digest("hex") !== amprenta) continue;
     const local = existsSync(target) ? readFileSync(target, "utf8") : "";
     if (local === cod || local.replace(/\r\n/g, "\n") === cod) continue;
-    const fresh = `${target}.nou`;
+    // Copia nouă păstrează .mjs la coadă: altfel `node --check` nu știe ce fel de fișier e și o respinge mereu.
+    const fresh = target.replace(/\.mjs$/, ".nou.mjs");
     writeFileSync(fresh, cod);
     if (spawnSync(process.execPath, ["--check", fresh], { windowsHide: true }).status !== 0) {
       unlinkSync(fresh);
