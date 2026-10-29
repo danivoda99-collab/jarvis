@@ -531,6 +531,16 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
     },
   },
   {
+    name: "muzica_dimineata",
+    description:
+      "Muzica de dimineață: laptopul o pornește singur la 9:30 pe Spotify (pe telefon, altfel pe laptop). „Fără muzică mâine dimineață” = sari true; „pune totuși muzica mâine” = sari false. Fără confirmare.",
+    input_schema: {
+      type: "object",
+      properties: { sari: { type: "boolean", description: "true = mâine dimineață nu pornește; false = pornește ca de obicei" } },
+      required: ["sari"],
+    },
+  },
+  {
     name: "nu_deranja",
     description:
       "„Nu mă deranja o oră”, „sunt în întâlnire până la 3”, „liniște până diseară”: notificările de pe telefon așteaptă până se termină (alertele urgente din echipă trec oricum). La final îi spui ce a venit între timp. „Gata, poți să mă anunți” = minute 0. Fără confirmare.",

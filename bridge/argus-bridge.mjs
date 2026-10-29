@@ -1127,6 +1127,33 @@ async function morningBrief(config) {
 // ——— Reamintirea to-do-urilor: de două ori pe zi (implicit 12 și 17, „sarciniOre” în config.json), sarcinile rămase,
 // cu „Gata” și „Mâine” pe fiecare, pe telefon. Doar dacă e ceva scadent azi, întârziat sau fără dată.
 // Nu la 10, ca să nu vină odată cu brief-ul. ———
+// ——— Muzica de dimineață: la 9:30 (config „muzicaOra”: "09:30"), o dată pe zi, laptopul cere serverului să pornească
+// playlistul pe Spotify (telefonul, altfel laptopul). iOS nu lasă automatizările să pornească Spotify cu telefonul blocat. ———
+const MUSIC_FILE = join(HERE, "muzica-dimineata.json");
+
+async function morningMusic(config) {
+  const today = bucharestDay();
+  const [hour, minute] = String(config.muzicaOra || "09:30").split(":").map(Number);
+  const now = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Bucharest", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
+  const [nowHour, nowMinute] = now.split(":").map(Number);
+  const late = nowHour * 60 + nowMinute - (hour * 60 + (minute || 0));
+  // Fereastră de 20 de minute: dacă laptopul a fost ocupat sau oprit mai mult, nu mai pornește muzica la prânz.
+  if (late < 0 || late > 20) return;
+  const state = loadState(MUSIC_FILE);
+  if (state.facut === today.date || Date.now() - (state.incercat || 0) < 4 * 60_000) return;
+  state.incercat = Date.now();
+  writeFileSync(MUSIC_FILE, JSON.stringify(state, null, 2));
+  try {
+    const result = await api(config, "POST", { porneste: true }, "", "/api/spotify/dimineata");
+    state.facut = today.date;
+    log("Muzica de dimineață:", result.text || "pornită");
+  } catch (error) {
+    // Telefonul încă nu apare: mai încercăm din 4 în 4 minute cât ține fereastra.
+    log("Muzica de dimineață n-a pornit:", error.message);
+  }
+  writeFileSync(MUSIC_FILE, JSON.stringify(state, null, 2));
+}
+
 const TODO_FILE = join(HERE, "reamintire-sarcini.json");
 
 async function todoReminder(config) {
@@ -1392,6 +1419,7 @@ function runChores(config) {
     trimLanes();
     warmWhatsApp(config);
     await shareMemory(config).catch(() => {});
+    if (config.muzicaDimineata !== false) await morningMusic(config).catch((error) => log("Muzica de dimineață:", error.message));
     if (Date.now() < limitUntil) return;
     if (config.urmariri !== false) await checkWatchers(config);
     if (config.pregatire !== false) await prepareMeetings(config);

@@ -681,6 +681,12 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       }
       return raw;
     },
+    muzica_dimineata: async (parameters: { sari?: unknown }) => {
+      const raw = await callApi("/api/spotify/dimineata", "POST", { sari: parameters.sari !== false });
+      if (raw.startsWith("Eroare")) return raw;
+      const data = JSON.parse(raw) as { text?: string };
+      return `${data.text ?? "Gata."} Spune-i asta scurt.`;
+    },
     nu_deranja: async (parameters: { minute?: unknown }) => {
       const raw = await callApi("/api/nu-deranja", "POST", { minute: Number(parameters.minute) || 0 });
       if (raw.startsWith("Eroare")) return raw;
@@ -1112,6 +1118,7 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
   const [panou, setPanou] = useState<Panou | null>(null);
   const [teamPick, setTeamPick] = useState(false);
   const [morningLink, setMorningLink] = useState("");
+  const morningSaveRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const panouReloadRef = useRef<() => void>(() => {});
   useEffect(() => {
     let stopped = false;
@@ -2084,6 +2091,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
                 onChange={(event) => {
                   const next = event.target.value;
                   setMorningMusic(next);
+                  // Laptopul pornește la 9:30 tot playlistul ăsta, așa că îl ținem și pe server.
+                  clearTimeout(morningSaveRef.current);
+                  morningSaveRef.current = setTimeout(() => {
+                    void fetch("/api/spotify/dimineata", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ playlist: next }) });
+                  }, 1200);
                   try {
                     if (next.trim()) localStorage.setItem(MORNING_MUSIC_KEY, next);
                     else localStorage.removeItem(MORNING_MUSIC_KEY);
