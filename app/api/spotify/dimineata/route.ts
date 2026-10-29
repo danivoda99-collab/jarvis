@@ -23,14 +23,14 @@ function bucharestDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Bucharest", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
-// Pune playlistul pe iPhone; cu „laptop”, și pe Spotify-ul de pe laptop dacă telefonul nu apare. Încearcă ~`tries` × 1,5 s.
-async function playMorning(call: SpotifyCall, wanted: string, options: { laptop: boolean; tries: number }) {
+// Unde cântă: „telefon” (linkul din Scurtături) sau „laptop” (pornirea de la 9:30, Spotify-ul deschis de punte). Încearcă ~`tries` × 1,5 s.
+async function playMorning(call: SpotifyCall, wanted: string, options: { where: "telefon" | "laptop"; tries: number }) {
   const found = wanted ? await ownPlaylist(call, wanted, true) : undefined;
   if (wanted && !found) return { status: 404, body: { error: `N-am găsit playlistul „${wanted}”.` } };
   for (let tries = 0; tries < options.tries; tries += 1) {
     const { data } = await call<{ devices: Device[] }>("/me/player/devices");
     const devices = data?.devices ?? [];
-    const device = devices.find((item) => item.type === "Smartphone") ?? (options.laptop ? devices.find((item) => item.type === "Computer") : undefined);
+    const device = devices.find((item) => item.type === (options.where === "laptop" ? "Computer" : "Smartphone"));
     if (device) {
       const id = encodeURIComponent(device.id);
       if (found) await call(`/me/player/shuffle?state=true&device_id=${id}`, { method: "PUT" });
@@ -43,7 +43,7 @@ async function playMorning(call: SpotifyCall, wanted: string, options: { laptop:
     }
     if (tries < options.tries - 1) await new Promise((resolve) => setTimeout(resolve, 1500));
   }
-  return { status: 502, body: { error: "Spotify nu apare nici pe telefon, nici pe laptop (iOS l-a oprit peste noapte)." } };
+  return { status: 502, body: { error: `Spotify nu apare ca dispozitiv pe ${options.where}.` } };
 }
 
 function failed(caught: unknown) {
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   }
   if (!sameKey(key)) return NextResponse.json({ error: "Cheie greșită." }, { status: 401 });
   try {
-    const result = await playMorning(await spotifyClient(), (url.searchParams.get("playlist") ?? "").trim(), { laptop: false, tries: 16 });
+    const result = await playMorning(await spotifyClient(), (url.searchParams.get("playlist") ?? "").trim(), { where: "telefon", tries: 16 });
     return NextResponse.json(result.body, { status: result.status });
   } catch (caught) {
     return failed(caught);
@@ -71,10 +71,10 @@ export async function GET(request: Request) {
 
 // Autentificat (telefonul sau puntea de pe laptop):
 // {playlist} = Setările au schimbat playlistul de dimineață; {sari: true} = „fără muzică mâine dimineață”;
-// {porneste: true} = laptopul, la ora fixă, pornește muzica (dacă azi nu e sărită).
+// {porneste: true, unde} = laptopul, la ora fixă, pornește muzica pe el (implicit) sau pe telefon (dacă azi nu e sărită).
 export async function POST(request: Request) {
   if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
-  const body = (await request.json().catch(() => ({}))) as { playlist?: string; sari?: boolean; porneste?: boolean };
+  const body = (await request.json().catch(() => ({}))) as { playlist?: string; sari?: boolean; porneste?: boolean; unde?: string };
   try {
     if (typeof body.playlist === "string") {
       const name = body.playlist.trim().slice(0, 100);
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       const skip = await command<string | null>("GET", SKIP).catch(() => null);
       if (skip === bucharestDate()) return NextResponse.json({ ok: true, sarit: true, text: "Azi fără muzică, cum ai cerut." });
       const wanted = (await command<string | null>("GET", PLAYLIST).catch(() => null)) || DEFAULT_PLAYLIST;
-      const result = await playMorning(await spotifyClient(), wanted, { laptop: true, tries: 3 });
+      const result = await playMorning(await spotifyClient(), wanted, { where: body.unde === "telefon" ? "telefon" : "laptop", tries: 8 });
       return NextResponse.json(result.body, { status: result.status });
     }
     return NextResponse.json({ error: "Cerere necunoscută." }, { status: 400 });
