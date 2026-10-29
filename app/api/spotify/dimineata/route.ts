@@ -11,6 +11,8 @@ export const maxDuration = 60;
 // Ce pune dimineața (din Setări) și ziua în care Daniel a zis „fără muzică mâine dimineață”.
 const PLAYLIST = "argus:muzica:playlist";
 const SKIP = "argus:muzica:sari";
+// Altă oră doar pentru o zi: „YYYY-MM-DD HH:MM”.
+const HOUR = "argus:muzica:ora";
 const DEFAULT_PLAYLIST = "Every morning every day";
 
 function sameKey(given: string) {
@@ -58,7 +60,10 @@ export async function GET(request: Request) {
   const key = url.searchParams.get("cheie") ?? "";
   if (!key) {
     if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
-    return NextResponse.json({ link: `${url.origin}/api/spotify/dimineata?cheie=${morningKey()}&playlist=` });
+    // `ora` = ora mutată pentru azi (puntea o folosește în locul celei din config), altfel null.
+    const moved = await command<string | null>("GET", HOUR).catch(() => null);
+    const [day, hour] = (moved ?? "").split(" ");
+    return NextResponse.json({ link: `${url.origin}/api/spotify/dimineata?cheie=${morningKey()}&playlist=`, ora: day === bucharestDate() ? hour : null });
   }
   if (!sameKey(key)) return NextResponse.json({ error: "Cheie greșită." }, { status: 401 });
   try {
@@ -71,10 +76,11 @@ export async function GET(request: Request) {
 
 // Autentificat (telefonul sau puntea de pe laptop):
 // {playlist} = Setările au schimbat playlistul de dimineață; {sari: true} = „fără muzică mâine dimineață”;
+// {ora: "12:30", zi: "azi"|"maine"} = altă oră doar pentru ziua aceea ({ora: ""} o anulează);
 // {porneste: true, unde} = laptopul, la ora fixă, pornește muzica pe el (implicit) sau pe telefon (dacă azi nu e sărită).
 export async function POST(request: Request) {
   if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
-  const body = (await request.json().catch(() => ({}))) as { playlist?: string; sari?: boolean; porneste?: boolean; unde?: string };
+  const body = (await request.json().catch(() => ({}))) as { playlist?: string; sari?: boolean; ora?: string; zi?: string; porneste?: boolean; unde?: string };
   try {
     if (typeof body.playlist === "string") {
       const name = body.playlist.trim().slice(0, 100);
@@ -89,6 +95,20 @@ export async function POST(request: Request) {
       if (body.sari) await command("SET", SKIP, day, "EX", 2 * 86_400);
       else await command("DEL", SKIP);
       return NextResponse.json({ ok: true, zi: day, text: body.sari ? `Bine, pe ${day} nu pornesc muzica dimineața.` : "Bine, muzica de dimineață pornește ca de obicei." });
+    }
+    if (typeof body.ora === "string") {
+      const match = /^(\d{1,2}):(\d{2})$/.exec(body.ora.trim());
+      if (body.ora && (!match || Number(match[1]) > 23 || Number(match[2]) > 59)) return NextResponse.json({ error: "Ora trebuie să fie HH:MM." }, { status: 400 });
+      const day = body.zi === "maine" ? bucharestDate(new Date(Date.now() + 86_400_000)) : bucharestDate();
+      if (!match) {
+        await command("DEL", HOUR);
+        return NextResponse.json({ ok: true, text: "Bine, muzica pornește la ora obișnuită." });
+      }
+      const hour = `${match[1].padStart(2, "0")}:${match[2]}`;
+      await command("SET", HOUR, `${day} ${hour}`, "EX", 2 * 86_400);
+      // Dacă azi era sărită, ora nouă înseamnă că o vrea totuși.
+      if ((await command<string | null>("GET", SKIP).catch(() => null)) === day) await command("DEL", SKIP);
+      return NextResponse.json({ ok: true, zi: day, text: `Bine, pe ${day} muzica pornește la ${hour}, apoi revine la ora obișnuită.` });
     }
     if (body.porneste) {
       const skip = await command<string | null>("GET", SKIP).catch(() => null);

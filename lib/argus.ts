@@ -533,11 +533,14 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
   {
     name: "muzica_dimineata",
     description:
-      "Muzica de dimineață: laptopul o pornește singur la 9:30 pe Spotify, pe boxele laptopului. „Fără muzică mâine dimineață” = sari true; „pune totuși muzica mâine” = sari false. Fără confirmare.",
+      "Muzica de dimineață: laptopul o pornește singur la 9:30 pe Spotify, pe boxele laptopului. „Fără muzică mâine dimineață” = sari true; „pune totuși muzica mâine” = sari false. „Azi/mâine pune muzica la 12:30” = ora 12:30 cu zi azi sau maine, doar pentru ziua aceea (ora goală = înapoi la ora obișnuită). Noaptea târziu, „dimineața asta” e azi. Fără confirmare.",
     input_schema: {
       type: "object",
-      properties: { sari: { type: "boolean", description: "true = mâine dimineață nu pornește; false = pornește ca de obicei" } },
-      required: ["sari"],
+      properties: {
+        sari: { type: "boolean", description: "true = mâine dimineață nu pornește; false = pornește ca de obicei" },
+        ora: { type: "string", description: "HH:MM: altă oră doar pentru o zi; \"\" = ora obișnuită" },
+        zi: { type: "string", enum: ["azi", "maine"], description: "Ziua pentru ora mutată" },
+      },
     },
   },
   {

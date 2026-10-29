@@ -1131,10 +1131,16 @@ async function morningBrief(config) {
 // serverului să pornească playlistul pe el („muzicaUnde”: "telefon" îl trimite pe iPhone, dacă Spotify a rămas treaz acolo).
 // iOS nu lasă automatizările să pornească Spotify cu telefonul blocat, de aceea pe laptop. ———
 const MUSIC_FILE = join(HERE, "muzica-dimineata.json");
+// Daniel poate muta ora doar pentru o zi („azi pune muzica la 12:30”); serverul o ține, puntea o întreabă din 15 în 15 minute.
+let musicHour = { zi: "", ora: "", at: 0 };
 
 async function morningMusic(config) {
   const today = bucharestDay();
-  const [hour, minute] = String(config.muzicaOra || "09:30").split(":").map(Number);
+  if (Date.now() - musicHour.at > 15 * 60_000 || musicHour.zi !== today.date) {
+    const { ora } = await api(config, "GET", undefined, "", "/api/spotify/dimineata").catch(() => ({}));
+    musicHour = { zi: today.date, ora: typeof ora === "string" ? ora : "", at: Date.now() };
+  }
+  const [hour, minute] = String(musicHour.ora || config.muzicaOra || "09:30").split(":").map(Number);
   const now = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Bucharest", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
   const [nowHour, nowMinute] = now.split(":").map(Number);
   const late = nowHour * 60 + nowMinute - (hour * 60 + (minute || 0));

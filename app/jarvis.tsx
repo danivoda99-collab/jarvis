@@ -681,8 +681,9 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       }
       return raw;
     },
-    muzica_dimineata: async (parameters: { sari?: unknown }) => {
-      const raw = await callApi("/api/spotify/dimineata", "POST", { sari: parameters.sari !== false });
+    muzica_dimineata: async (parameters: { sari?: unknown; ora?: unknown; zi?: unknown }) => {
+      const body = typeof parameters.ora === "string" ? { ora: parameters.ora, zi: parameters.zi === "maine" ? "maine" : "azi" } : { sari: parameters.sari !== false };
+      const raw = await callApi("/api/spotify/dimineata", "POST", body);
       if (raw.startsWith("Eroare")) return raw;
       const data = JSON.parse(raw) as { text?: string };
       return `${data.text ?? "Gata."} Spune-i asta scurt.`;
