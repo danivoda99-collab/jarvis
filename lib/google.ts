@@ -167,3 +167,17 @@ export function formatLocal(iso: string): string {
     minute: "2-digit",
   });
 }
+
+// Pentru paznic: merge reîmprospătarea cu tokenul comun (fără cookie)? „expirat” = Daniel trebuie să reconecteze Google.
+export async function googleHealth(): Promise<"ok" | "expirat" | "neconectat" | "necunoscut"> {
+  const shared = await command<string | null>("GET", SHARED_TOKEN).catch(() => null);
+  const refreshToken = shared ? openToken(shared) : null;
+  if (!refreshToken) return "neconectat";
+  try {
+    const result = await tokenRequest({ refresh_token: refreshToken, grant_type: "refresh_token" });
+    if (result.access_token) return "ok";
+    return result.error === "invalid_grant" ? "expirat" : "necunoscut";
+  } catch {
+    return "necunoscut";
+  }
+}
