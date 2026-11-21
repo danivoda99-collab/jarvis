@@ -731,14 +731,14 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     buget_situatie: async () => {
       const raw = await callApi("/api/buget?situatie=1");
       if (raw.startsWith("Eroare")) return raw;
-      const data = JSON.parse(raw) as { luna?: string; tabel?: string[][]; venit?: string };
+      const data = JSON.parse(raw) as { luna?: string; perioada?: string; tabel?: string[][]; venit?: string };
       if (data.tabel && data.tabel.length > 1) {
         // Bare pentru toate categoriile cu buget (cele aproape de limită sus), apoi cheltuielile fără buget; tabelul întreg doar dacă nu se pot citi cifrele.
         const vizual = budgetVizual(data.tabel, data.venit);
         addCard({
           id: crypto.randomUUID(),
           kind: "summary",
-          title: `Buget ${data.luna ?? ""}`.trim(),
+          title: `Buget ${data.perioada ?? data.luna ?? ""}`.trim(),
           vizual,
           table: vizual ? unbudgeted(data.tabel) : data.tabel,
           module: "buget",

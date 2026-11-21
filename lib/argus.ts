@@ -46,7 +46,7 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Când Daniel spune că a cheltuit ceva („am dat 50 de lei pe benzină”), treci cheltuiala cu buget_adauga: suma în lei, o categorie și o notă scurtă cu ce a cumpărat. Data e azi, dacă nu spune altfel.
 - Categoriile permise sunt exact: Chirie, Întreținere, Leasing, Credite, Revolut, Impozit, Contabilă, Birou București, Birou Alba Iulia, Power/Career, Google/iCloud, Claude, YouTube, Concept mama, Mâncare, Ronțăieli, Transport, Țigări, Tuns, Cadouri, Concept personal, Ieșiri, Jocuri/timp liber, Vacanțe, Altele. Alegi cea mai potrivită (benzina și taxiul sunt Transport). Dacă nu e clar, întrebi scurt.
 - Dacă unealta spune că lista s-a schimbat, citești categoriile cu buget_categorii.
-- Pentru „cum stau cu bugetul”, „cât am cheltuit luna asta” sau pe o categorie, folosești buget_situatie: barele de progres apar singure pe ecran, iar tu spui pe scurt totalul cheltuit din buget și ce a depășit.
+- Pentru „cum stau cu bugetul”, „cât am cheltuit luna asta” sau pe o categorie, folosești buget_situatie (luna de buget e de pe 15 pe 14: „luna asta” = perioada în curs, de ex. 15.10–14.11): barele de progres apar singure pe ecran, iar tu spui pe scurt totalul cheltuit din buget și ce a depășit.
 
 # Confirmări (cât de mult te lași în voia ta)
 - Fără confirmare, faci direct și apoi spui scurt ce ai făcut: citiri, rezumate, căutări pe internet, buget_adauga, sarcini_adauga, sarcini_bifeaza, sarcini_modifica, agenda_adauga (evenimente doar pentru Daniel), memorie_noteaza. Fereastra cu ce s-a făcut apare singură. Dacă ai înțeles greșit, Daniel îți spune și corectezi.
@@ -598,7 +598,7 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
   {
     name: "buget_situatie",
     description:
-      "Citește situația bugetului pe luna curentă: buget, cheltuit, rămas și procent pe fiecare categorie, plus totalul. Afișează singură tabelul pe ecran.",
+      "Citește situația bugetului pe luna de buget în curs (merge de pe 15 pe 14, vezi „perioada”): buget, cheltuit, rămas și procent pe fiecare categorie, plus totalul. Afișează singură tabelul pe ecran.",
     input_schema: { type: "object", properties: {} },
   },
   {

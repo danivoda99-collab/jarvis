@@ -937,10 +937,16 @@ function parseAlerts(text) {
     .slice(0, 5);
 }
 
-// O alertă de buget (o categorie trecută de 90%) vine o dată pe lună; restul, o dată pe zi.
-// Ziua e „19.10.2026”, deci luna e ultima parte, „10.2026”.
+// O alertă de buget (o categorie trecută de 90%) vine o dată pe luna de buget (de pe 15 pe 14); restul, o dată pe zi.
+// Ziua e „19.10.2026”: de pe 15 încolo luna de buget e „10.2026”, înainte de 15 e luna trecută.
+function budgetCycle(day) {
+  const [d, m, y] = day.split(".").map(Number);
+  if (d >= 15) return `${m}.${y}`;
+  return m === 1 ? `12.${y - 1}` : `${m - 1}.${y}`;
+}
+
 function alreadySent(item, day) {
-  if (item.cheie.startsWith("buget:")) return item.zi.slice(3) === day.slice(3);
+  if (item.cheie.startsWith("buget:")) return budgetCycle(item.zi) === budgetCycle(day);
   return item.zi === day;
 }
 
@@ -959,7 +965,7 @@ async function checkAlerts(config) {
       "Verifici, repede:",
       "1. Gmail: mailurile necitite din ultimele 3 ore. Important = un om real îi cere ceva lui Daniel, un termen azi sau mâine, ceva de la OVB sau de la echipă. Reclamele, newsletterele și notificările automate nu contează. Un mail de la un client OVB îl spui doar ca „mail de la un client”, fără nume sau detalii.",
       "2. Echipa (centralizatorul: oamenii din „_ConfigEchipa” și rândurile lor din „Raportari”). Raportarea e SĂPTĂMÂNALĂ: săptămâna e sâmbătă–vineri, raportul pentru ea se trimite până sâmbăta următoare la 17:00 (toleranță până la 18, cel mult 19), iar în timpul săptămânii se pot trimite rapoarte care se adună. Deci nu alertezi pentru zile fără raport. Doar vineri după 18:00 și sâmbătă până la 17:00: cine n-a trimis încă nimic pentru săptămâna care se încheie vineri (cheie echipa:sapt-<prenume>). Sâmbătă după 19:00: cine a ratat termenul (cheie echipa:ratat-<prenume>). În restul timpului, la punctul ăsta nu e nimic.",
-      "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna curentă): categoriile care au trecut de 90% din buget (cheie buget:<categorie>, fără procent în cheie).",
+      "3. Bugetul personal (tabul „Buget vs. cheltuit”, luna de buget în curs, de pe 15 pe 14): categoriile care au trecut de 90% din buget (cheie buget:<categorie>, fără procent în cheie).",
       `Ce a fost deja anunțat (nu repeta): ${state.trimise.filter((item) => alreadySent(item, now.slice(0, 10))).map((item) => item.cheie).join(", ") || "nimic"}.`,
       "Respecți ce scrie în memorie.md despre alerte (de exemplu ce nu vrea Daniel să primească).",
       "Răspunzi DOAR așa: primul rând exact NIMIC dacă nu e nimic nou și important. Altfel primul rând ALERTA, apoi câte un rând pe alertă, cel mult 3: „- <cheie scurtă, de ex. mail:ana-contract, echipa:neraportat, buget:mancare> | <o propoziție bună de citit cu voce>”.",
