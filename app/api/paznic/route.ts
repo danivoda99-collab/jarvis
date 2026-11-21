@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { command } from "@/lib/cereri";
 import { ruleazaPaznic } from "@/lib/paznic";
 
-// Paznicul tehnic, chemat la ~10 minute de GitHub Actions (.github/workflows/paznic.yml).
+// Paznicul tehnic, chemat la 10 minute de cron-job.org (contul lui Daniel). Nu din GitHub Actions: asta a dus la suspendarea contului.
 // Nu arată nimic despre Daniel: răspunde doar câte probleme a găsit. Rulează cel mult o dată la 4 minute,
 // oricine ar chema adresa, deci nu poate fi folosit la nesfârșit.
 export const dynamic = "force-dynamic";
@@ -16,9 +16,11 @@ export async function GET() {
       return NextResponse.json({ ok: true, sarit: true });
     }
     const { probleme } = await ruleazaPaznic();
+    // Ultima tură: ecranul Echipa îl arată pornit cât timp a rulat în ultima jumătate de oră.
+    await command("SET", "argus:paznic:ultima", new Date().toISOString(), "EX", 24 * 60 * 60).catch(() => undefined);
     return NextResponse.json({ ok: true, probleme: probleme.length });
   } catch {
-    // Paznicul însuși nu poate verifica (de exemplu Redis căzut): GitHub vede eroarea și îl anunță pe Daniel pe mail.
+    // Paznicul însuși nu poate verifica (de exemplu Redis căzut): cron-job.org vede eroarea și îl anunță pe Daniel pe mail.
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 }

@@ -13,6 +13,20 @@ const RULES = [
   "Rezultatul: dacă Daniel trebuie să facă ceva (o reconectare, o cheie, credit), îl începi cu „DANIEL:” și spui exact ce și unde; altfel scrii pe scurt cauza și ce ai făcut, pentru jurnal, fără să-l anunți.",
 ].join("\n");
 
+// Ultimele erori (fără date personale: doar textul erorii, unde și aparatul), ca să le poată verifica laptopul.
+export async function GET() {
+  if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
+  const brut = await command<string[]>("LRANGE", "argus:erori", 0, 29).catch(() => [] as string[]);
+  const erori = (brut ?? []).flatMap((x) => {
+    try {
+      return [JSON.parse(x)];
+    } catch {
+      return [];
+    }
+  });
+  return NextResponse.json({ erori }, { headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: Request) {
   if (!(await isAuthenticated())) return NextResponse.json({ error: "Neautentificat." }, { status: 401 });
   const body = (await request.json().catch(() => ({}))) as { mesaj?: unknown; unde?: unknown; aparat?: unknown };

@@ -27,7 +27,6 @@ export async function POST(request: Request) {
       );
       return NextResponse.json({ ok: true, bilet, raspuns: "Am trimis întrebarea mai departe. Răspunsul apare aici, pe pagina de ajutor, imediat ce e gata." });
     }
-    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Ajutorul nu e pornit încă." }, { status: 500 });
     if (!(await allowed(ip, 30))) return NextResponse.json({ error: "Prea multe întrebări într-o oră. Încearcă puțin mai târziu." }, { status: 429 });
     const history = Array.isArray(body.istoric) ? body.istoric.filter((item) => item && typeof item.text === "string" && item.text.trim()) : [];
     return NextResponse.json({ ok: true, raspuns: await answer(question, history) });

@@ -4,6 +4,7 @@ import { firstSentence, markOpen, notify } from "@/lib/push";
 import { QueueError, addCerere, awayText, laptopAway, getCerere, listCereri, readSignal, saveCerere, saveIfStatus, type Cerere, type Status } from "@/lib/cereri";
 import { cleanVizual } from "@/lib/vizual";
 import { deliverLines } from "@/lib/ajutor";
+import { eAgent, numara } from "@/lib/echipa-viata";
 
 // Cererile pentru Claude de pe laptop. Telefonul și laptopul sunt logate amândouă cu codul lui Daniel.
 
@@ -28,7 +29,8 @@ export async function GET(request: Request) {
       const fromPhone = params.has("tel");
       const semnal = await readSignal(!fromPhone);
       const laptop = params.has("laptop") ? await laptopAway() : undefined;
-      return NextResponse.json({ semnal, ...(laptop !== undefined ? { laptop } : {}) }, { headers: { "Cache-Control": "no-store" } });
+      // „anunt”: serverul ăsta anunță schimbările pe canal, deci laptopul poate verifica rar.
+      return NextResponse.json({ semnal, anunt: 1, ...(laptop !== undefined ? { laptop } : {}) }, { headers: { "Cache-Control": "no-store" } });
     }
     return NextResponse.json({ cereri: await listCereri() }, { headers: { "Cache-Control": "no-store" } });
   } catch (caught) {
@@ -47,7 +49,10 @@ export async function POST(request: Request) {
     // Laptopul raportează direct un rezultat (o urmărire îndeplinită, o pregătire de întâlnire).
     rezultat?: string;
     vizual?: unknown;
+    // Agentul care o trimite (laptopul), pentru nota lui.
+    agent?: string;
   };
+  const agent = eAgent(body.agent) ? body.agent : undefined;
   const text = String(body.cerere ?? "").trim().slice(0, 4000);
   if (!text) return NextResponse.json({ error: "Lipsește cererea." }, { status: 400 });
   const confirmed = body.confirmat?.text
@@ -61,12 +66,14 @@ export async function POST(request: Request) {
     const titlu = (body.titlu ?? "").trim().slice(0, 120) || text.slice(0, 60);
     if (body.rezultat) {
       const cerere = await addCerere(titlu, text, undefined, "în lucru");
-      const done = { ...cerere, status: "gata" as const, rezultat: String(body.rezultat).slice(0, 8000), vizual: cleanVizual(body.vizual), actualizat: new Date().toISOString() };
+      const done = { ...cerere, ...(agent ? { agent } : {}), status: "gata" as const, rezultat: String(body.rezultat).slice(0, 8000), vizual: cleanVizual(body.vizual), actualizat: new Date().toISOString() };
       await saveCerere(done);
       await notify(titlu, firstSentence(done.rezultat), done.id);
       return NextResponse.json({ ok: true, id: cerere.id });
     }
-    const cerere = await addCerere(titlu, text, confirmed);
+    const added = await addCerere(titlu, text, confirmed);
+    const cerere = agent ? { ...added, agent } : added;
+    if (agent) await saveCerere(cerere);
     // Dacă laptopul pare oprit, Argus îi spune lui Daniel că cererea așteaptă până pornește.
     const away = await laptopAway();
     const laptop = away === null ? undefined : `Laptopul nu mai răspunde de ${awayText(away)}. Cererea așteaptă și pornește singură când laptopul revine. Spune-i asta lui Daniel.`;
@@ -119,6 +126,10 @@ export async function PATCH(request: Request) {
     if (forDaniel) updated.rezultat = (updated.rezultat ?? "").replace(/^\s*DANIEL:\s*/, "");
     if (!(await saveIfStatus(updated, current.status))) {
       return NextResponse.json({ error: "Cererea s-a schimbat între timp." }, { status: 409 });
+    }
+    // Da-ul sau Nu-ul lui Daniel la o propunere a unui agent intră în nota acelui agent.
+    if (current.agent && (updated.status === "confirmată" || updated.status === "refuzată")) {
+      await numara(current.agent, updated.status === "confirmată" ? "aprobate" : "refuzate").catch(() => undefined);
     }
     // Răspunsurile pentru oamenii de pe pagina de ajutor și ce învață asistentul.
     if (updated.status === "gata" && updated.rezultat) await deliverLines(updated.rezultat).catch(() => undefined);

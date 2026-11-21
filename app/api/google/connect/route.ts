@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { STATE_COOKIE, consentUrl, newOauthState } from "@/lib/google";
+import { STATE_COOKIE, consentUrl, newOauthState, useReconnectTicket } from "@/lib/google";
 
 export async function GET(request: Request) {
-  const origin = new URL(request.url).origin;
-  if (!(await isAuthenticated())) return NextResponse.redirect(origin);
+  const url = new URL(request.url);
+  const origin = url.origin;
+  // Fără sesiune merge doar cu biletul unic dat de paznic laptopului (reconectare automată).
+  if (!(await isAuthenticated()) && !(await useReconnectTicket(url.searchParams.get("bilet")))) return NextResponse.redirect(origin);
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return new NextResponse("Lipsesc GOOGLE_CLIENT_ID sau GOOGLE_CLIENT_SECRET în Vercel. Adaugă-le și fă Redeploy.", {
       status: 500,
