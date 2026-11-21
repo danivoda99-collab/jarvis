@@ -1,13 +1,31 @@
 // Paznicul tehnic: verifică la câteva minute că Argus merge (laptopul, coada, Google, cheile) și îl anunță pe Daniel
 // o singură dată când ceva pică, apoi când își revine. Noaptea (23–08) nu sună: notificarea așteaptă în aplicație.
 
-import { awayText, command, laptopAway, listCereri } from "@/lib/cereri";
-import { googleHealth } from "@/lib/google";
+import { addCerere, awayText, command, laptopAway, listCereri } from "@/lib/cereri";
+import { googleHealth, newReconnectTicket } from "@/lib/google";
 import { hold, notify } from "@/lib/push";
+import { brainState } from "@/lib/creier";
 
 export type Problema = { cheie: string; titlu: string; text: string };
 
 const STARE = "argus:paznic:stare";
+const APP = "https://jarvis-one-psi-36.vercel.app";
+
+// Reconectarea automată: Claude de pe laptop deschide adresa cu bilet în Chrome (unde Daniel e logat în Google)
+// și apasă doar pe butoane; puntea îi permite click-uri, dar nicio tastare, deci nu poate scrie parole sau coduri.
+async function reconecteazaGoogle() {
+  const bilet = await newReconnectTicket();
+  const pasi = [
+    "Paznicul a văzut că s-a expirat conexiunea Google a aplicației Argus. Reconectează-o tu, în Chrome-ul de pe laptop, fără să-l deranjezi pe Daniel:",
+    `1. Deschide un tab NOU (nu atingi tabul de WhatsApp) cu adresa: ${APP}/api/google/connect?bilet=${bilet}`,
+    "2. La alegerea contului apeși pe contul danivoda99@gmail.com. Dacă Google arată „Google hasn't verified this app”, apeși „Continue” (e aplicația lui Daniel). Pe ecranele cu permisiuni bifezi tot ce e de bifat și apeși „Continue” / „Allow”.",
+    "3. E gata când pagina se întoarce în Argus cu „google=conectat” în adresă. Închizi tabul deschis de tine.",
+    "Nu tastezi nimic: dacă Google cere parola, un cod sau confirmare pe telefon, sau pagina spune altceva (bilet expirat, eroare), te oprești, închizi tabul și răspunzi cu „DANIEL: Google cere reconectarea manuală: deschide Argus și apasă „Conectează Google”.” plus motivul pe scurt.",
+    "Dacă a mers, răspunzi doar „Google reconectat automat.”",
+  ].join("\n");
+  await addCerere("Reconectare Google (paznic)", pasi, undefined, undefined, true, "google");
+}
+
 const COADA_VAZUTA = "argus:paznic:coada";
 // Cât de des repetă aceeași alertă dacă problema rămâne.
 const REPETA_ORE = 6;
@@ -62,13 +80,25 @@ async function cautaInCoada(): Promise<Problema[]> {
 async function verificaGoogle(): Promise<Problema[]> {
   const stare = await googleHealth();
   if (stare === "expirat") {
-    return [{ cheie: "google", titlu: "Conexiunea Google a expirat", text: "Calendarul, sarcinile și mailul nu merg. Deschide Argus și apasă „Conectează Google”." }];
+    return [{ cheie: "google", titlu: "Conexiunea Google a expirat", text: "Încerc să o refac singur de pe laptop. Dacă nu reușesc, îți scriu să apeși „Conectează Google” în Argus." }];
+  }
+  return [];
+}
+
+// Creierul de pe laptop (abonamentul): problemă doar când în ultima jumătate de oră nu a răspuns nici laptopul, nici rezerva.
+async function verificaCreier(): Promise<Problema[]> {
+  const { stare } = await brainState();
+  if (stare?.sursa === "nimic" && minuteDe(stare.cand) <= 30) {
+    return [{ cheie: "creier", titlu: "Argus n-a putut răspunde", text: `Laptopul n-a răspuns (${stare.motiv ?? "motiv necunoscut"}) și nici rezerva pe API. Verifică laptopul.` }];
   }
   return [];
 }
 
 // Cheia Claude: un apel minuscul (1 token) prinde și cheia greșită, și creditul terminat.
+// Fără credit, Argus merge pe laptop (abonamentul), deci alerta spune asta; problemă gravă e doar când nu merge nimic.
 async function verificaClaude(): Promise<Problema[]> {
+  const creier = await verificaCreier();
+  if (creier.length) return creier;
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return [{ cheie: "claude", titlu: "Lipsește cheia Claude", text: "ANTHROPIC_API_KEY nu e pusă în Vercel." }];
   try {
@@ -83,8 +113,8 @@ async function verificaClaude(): Promise<Problema[]> {
     if (response.status === 401 || response.status === 403) {
       return [{ cheie: "claude", titlu: "Cheia Claude nu mai merge", text: "Creierul lui Argus nu răspunde: cheia ANTHROPIC_API_KEY din Vercel e respinsă." }];
     }
-    if (/credit balance/i.test(text)) {
-      return [{ cheie: "claude", titlu: "S-a terminat creditul Claude", text: "Creierul lui Argus nu mai răspunde până nu adaugi credit în consola Anthropic." }];
+    if (/credit balance|credits|billing|access is turned off|usage limits/i.test(text)) {
+      return [{ cheie: "claude", titlu: "S-a terminat creditul Claude API", text: "Argus răspunde de pe laptop (abonamentul Max), puțin mai încet, până adaugi credit în consola Anthropic." }];
     }
     return [];
   } catch {
@@ -131,6 +161,11 @@ export async function ruleazaPaznic(now = new Date()) {
     if (!noua[cheie]) deAnuntat.push({ titlu: "Rezolvat", text: `${inainte.titlu}: merge din nou.` });
   }
   await command("SET", STARE, JSON.stringify(noua));
+
+  // Google expirat și laptopul pornit: laptopul încearcă reconectarea (o dată, apoi iar la 6 ore odată cu alerta).
+  if (laptop.laptopPornit && deAnuntat.some((m) => m.titlu === "Conexiunea Google a expirat")) {
+    await reconecteazaGoogle().catch(() => undefined);
+  }
 
   const liniste = noapte(now);
   for (const mesaj of deAnuntat) {

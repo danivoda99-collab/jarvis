@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { SESSION_MAX_AGE } from "@/lib/auth";
-import { GOOGLE_COOKIE, STATE_COOKIE, exchangeCode, sealToken } from "@/lib/google";
+import { GOOGLE_COOKIE, STATE_COOKIE, exchangeCode, saveSharedToken, sealToken } from "@/lib/google";
 
 // Întoarcerea vine de pe google.com, așa că browserul nu trimite cookie-ul de sesiune (e „strict”).
 // Verificăm în schimb codul unic pus de /api/google/connect și revenim în aplicație dintr-o pagină
@@ -25,8 +25,11 @@ export async function GET(request: Request) {
   const tokens = await exchangeCode(code, url.origin);
   if (!tokens.refresh_token) return backToApp("eroare");
 
+  const sealed = sealToken(tokens.refresh_token);
+  // Laptopul și paznicul folosesc copia comună: o actualizăm acum, nu abia la următorul apel Google de pe telefon.
+  await saveSharedToken(sealed).catch(() => undefined);
   const response = backToApp("conectat");
-  response.cookies.set(GOOGLE_COOKIE, sealToken(tokens.refresh_token), {
+  response.cookies.set(GOOGLE_COOKIE, sealed, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

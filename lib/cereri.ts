@@ -29,6 +29,10 @@ export type Cerere = {
   progres?: string;
   // Treabă pornită de monitorizare (pagina de ajutor): rezultatul nu-l anunță pe Daniel, doar dacă începe cu „DANIEL:”.
   liniste?: boolean;
+  // Agentul care a făcut-o (secretar, manager, whatsapp…): pentru nota lui, când Daniel aprobă sau refuză.
+  agent?: string;
+  // Treabă dată de paznic: „google” = reconectare automată în Chrome-ul laptopului (doar click-uri, fără tastare).
+  paznic?: "google";
 };
 
 const LIST = "argus:cereri";
@@ -85,6 +89,15 @@ export async function saveCerere(cerere: Cerere) {
   // 30 de zile e destul ca istoric; coada nu crește la nesfârșit.
   await command("SET", key(cerere.id), JSON.stringify(cerere), "EX", 60 * 60 * 24 * 30);
   await command("INCR", SIGNAL);
+  await announce();
+}
+
+// Laptopul ascultă deja canalul creierului (lib/creier.ts, CANAL): îl anunțăm tot acolo că s-a schimbat ceva în coadă,
+// ca să nu mai întrebe el la câteva secunde (asta consuma aproape toată limita lunară de comenzi Redis).
+// Dacă anunțul nu ajunge, laptopul tot află la următoarea lui verificare rară.
+const SIGNAL_CHANNEL = "argus:creier:cereri";
+async function announce() {
+  await command("PUBLISH", SIGNAL_CHANNEL, JSON.stringify({ semnal: 1 })).catch(() => undefined);
 }
 
 // Scrie cererea doar dacă e încă în starea citită înainte, într-un singur pas în Redis:
@@ -105,6 +118,7 @@ export async function saveIfStatus(cerere: Cerere, expected: Status): Promise<bo
     await saveCerere(cerere);
     return true;
   }
+  if (result === 1) await announce();
   return result === 1;
 }
 
@@ -147,6 +161,7 @@ export async function addCerere(
   confirmare?: Cerere["confirmare"],
   status?: Status,
   liniste?: boolean,
+  paznic?: Cerere["paznic"],
 ): Promise<Cerere> {
   const now = new Date().toISOString();
   const cerere: Cerere = {
@@ -158,6 +173,7 @@ export async function addCerere(
     actualizat: now,
     confirmare,
     ...(liniste ? { liniste } : {}),
+    ...(paznic ? { paznic } : {}),
   };
   await command("LPUSH", LIST, cerere.id);
   await command("LTRIM", LIST, 0, KEEP - 1);

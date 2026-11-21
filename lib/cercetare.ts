@@ -2,11 +2,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getCerere, saveCerere } from "@/lib/cereri";
 import { memoryPrompt } from "@/lib/memorie";
 import { notify } from "@/lib/push";
+import { creditGone, rememberApiFailure } from "@/lib/creier";
+import { laptopAway } from "@/lib/cereri";
 
 // „Mă documentez și revin”: Claude caută și citește pe internet, pe server, cât Daniel vorbește mai departe cu Argus.
 // Rezultatul ajunge în coada de cereri ca „gata”, iar telefonul îl anunță cu voce, ca la laptop.
 
-const MODEL = process.env.ARGUS_RESEARCH_MODEL || process.env.ARGUS_MODEL || "claude-sonnet-5-5";
+const MODEL = process.env.ARGUS_RESEARCH_MODEL || process.env.ARGUS_MODEL || "claude-opus-5-5";
 const MAX_ROUNDS = 6;
 
 const SYSTEM = `Ești partea de cercetare a lui Argus, asistentul vocal al lui Daniel (Executive Sales Manager la OVB Allfinanz România, Alba Iulia).
@@ -19,6 +21,11 @@ Forma răspunsului, fără excepții:
 Nu inventa nimic: dacă nu găsești sigur, spui asta în primul paragraf.
 Nu lucrezi cu date personale ale clienților OVB, parole sau plăți.`;
 
+// Aceeași cercetare, făcută de Claude de pe laptop (abonamentul), când API-ul nu are credit.
+export function laptopResearch(question: string) {
+  return `Documentează-te pe internet și răspunde în română, cu diacritice. Primul paragraf: răspunsul direct, în una-două propoziții scurte, bune de citit cu voce tare. Apoi cel mult 8 rânduri scurte cu detaliile importante, fiecare începând cu „- ”. La final un rând „Surse: ” cu cel mult 3 domenii. Nu inventa: dacă nu găsești sigur, spune asta în primul paragraf.\n\nÎntrebarea: ${question}`;
+}
+
 export async function research(id: string, intrebare: string) {
   const client = new Anthropic();
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: intrebare }];
@@ -28,11 +35,12 @@ export async function research(id: string, intrebare: string) {
     for (let round = 0; round < MAX_ROUNDS; round += 1) {
       const response = await client.beta.messages.create({
         model: MODEL,
-        max_tokens: 3000,
+        max_tokens: 8000,
+        output_config: { effort: "medium" },
         system: SYSTEM + (await memoryPrompt()),
         tools: [
-          { type: "web_search_20250305", name: "web_search", max_uses: 6, user_location: { type: "approximate", timezone: "Europe/Bucharest" } },
-          { type: "web_fetch_20250910", name: "web_fetch", max_uses: 4 },
+          { type: "web_search_20260209", name: "web_search", max_uses: 6, user_location: { type: "approximate", timezone: "Europe/Bucharest" } },
+          { type: "web_fetch_20260209", name: "web_fetch", max_uses: 4 },
         ],
         messages,
       });
@@ -42,6 +50,13 @@ export async function research(id: string, intrebare: string) {
     }
   } catch (caught) {
     failed = caught instanceof Anthropic.APIError ? `Claude a răspuns cu eroare ${caught.status ?? ""}.` : "Nu am putut termina căutarea.";
+    await rememberApiFailure(caught);
+    // Fără credit pe API: cercetarea trece pe laptop (aceeași cerere, preluată de punte ca „nouă”).
+    if (creditGone(caught) && (await laptopAway()) === null) {
+      const cerere = await getCerere(id);
+      if (cerere) await saveCerere({ ...cerere, status: "nouă", cerere: laptopResearch(intrebare), actualizat: new Date().toISOString() });
+      return;
+    }
   }
   const cerere = await getCerere(id);
   if (!cerere) return;

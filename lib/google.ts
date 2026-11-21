@@ -94,30 +94,42 @@ export class GoogleError extends Error {}
 const SHARED_TOKEN = "argus:google";
 let sharedSaved = "";
 
-async function refreshTokenFor(): Promise<string | null> {
-  const sealed = (await cookies()).get(GOOGLE_COOKIE)?.value;
-  const own = sealed ? openToken(sealed) : null;
-  if (own && sealed) {
-    if (sharedSaved !== sealed) {
-      await command("SET", SHARED_TOKEN, sealed)
-        .then(() => (sharedSaved = sealed))
-        .catch(() => undefined);
-    }
-    return own;
-  }
+// Tokenurile de încercat, în ordine: al aparatului (cookie), apoi copia comună. Dacă al telefonului a expirat,
+// dar laptopul s-a reconectat între timp, merge cu copia comună fără ca Daniel să mai apese ceva.
+async function refreshTokens(): Promise<{ token: string; sealed: string; shared: boolean }[]> {
+  const own = (await cookies()).get(GOOGLE_COOKIE)?.value;
   const shared = await command<string | null>("GET", SHARED_TOKEN).catch(() => null);
-  return shared ? openToken(shared) : null;
+  const list: { token: string; sealed: string; shared: boolean }[] = [];
+  const ownToken = own ? openToken(own) : null;
+  if (own && ownToken) list.push({ token: ownToken, sealed: own, shared: own === shared });
+  const sharedToken = shared ? openToken(shared) : null;
+  if (shared && sharedToken && sharedToken !== ownToken) list.push({ token: sharedToken, sealed: shared, shared: true });
+  return list;
+}
+
+// După „Conectează Google” (de pe telefon sau de pe laptop), tokenul nou devine imediat și copia comună.
+export async function saveSharedToken(sealed: string) {
+  await command("SET", SHARED_TOKEN, sealed);
+  sharedSaved = sealed;
 }
 
 export async function google<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const refreshToken = await refreshTokenFor();
-  if (!refreshToken) {
+  const tokens = await refreshTokens();
+  if (!tokens.length) {
     throw new GoogleError("Google nu e conectat. Daniel trebuie să apese „Conectează Google” în aplicație.");
   }
-  const { access_token: accessToken } = await tokenRequest({
-    refresh_token: refreshToken,
-    grant_type: "refresh_token",
-  });
+  let accessToken: string | undefined;
+  for (const candidate of tokens) {
+    ({ access_token: accessToken } = await tokenRequest({ refresh_token: candidate.token, grant_type: "refresh_token" }));
+    if (!accessToken) continue;
+    // Tokenul care merge devine copia comună (laptopul și paznicul o folosesc), dacă nu era deja.
+    if (!candidate.shared && sharedSaved !== candidate.sealed) {
+      await command("SET", SHARED_TOKEN, candidate.sealed)
+        .then(() => (sharedSaved = candidate.sealed))
+        .catch(() => undefined);
+    }
+    break;
+  }
   if (!accessToken) {
     throw new GoogleError("Conexiunea cu Google a expirat. Daniel trebuie să apese din nou „Conectează Google”.");
   }
@@ -180,4 +192,17 @@ export async function googleHealth(): Promise<"ok" | "expirat" | "neconectat" | 
   } catch {
     return "necunoscut";
   }
+}
+
+// Bilet de o singură folosință pentru reconectarea automată de pe laptop: Chrome-ul de acolo nu are sesiunea Argus,
+// așa că paznicul îi dă o adresă /api/google/connect?bilet=… valabilă 15 minute.
+const BILET = (id: string) => `argus:google:bilet:${id}`;
+export async function newReconnectTicket(): Promise<string> {
+  const id = randomBytes(18).toString("hex");
+  await command("SET", BILET(id), "1", "EX", 15 * 60);
+  return id;
+}
+export async function useReconnectTicket(id: string | null): Promise<boolean> {
+  if (!id || !/^[0-9a-f]{36}$/.test(id)) return false;
+  return (await command<number>("DEL", BILET(id)).catch(() => 0)) === 1;
 }

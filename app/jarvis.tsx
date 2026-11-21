@@ -445,14 +445,17 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
         body: body ? JSON.stringify(body) : undefined,
         cache: "no-store",
       });
-      const data = (await response.json()) as { ok?: boolean; error?: string; deschide?: string; piesa?: string };
+      // Un răspuns care nu e JSON (de exemplu serverul a depășit timpul) îl spunem cu codul lui, nu ca „n-am ajuns la server”.
+      const data = (await response.json().catch(() => ({ error: response.status === 504 ? "a durat prea mult (504)" : `răspuns neașteptat (${response.status})` }))) as { ok?: boolean; error?: string; deschide?: string; piesa?: string };
       if (path === "/api/spotify" && data.deschide) lastSpotifyOpenRef.current = { uri: data.deschide, piesa: data.piesa };
       if (!response.ok) return `Eroare: ${data.error ?? response.status}`;
       // După o schimbare în to-do, buget sau agendă, cifrele din jurul sferei se iau din nou, nu la 5 minute.
       if (method !== "GET" && /^\/api\/(sarcini|buget|agenda)/.test(path)) setTimeout(() => panouReloadRef.current(), 600);
       return data.ok && Object.keys(data).length === 1 ? "Gata, făcut." : JSON.stringify(data);
-    } catch {
-      return "Eroare: nu am putut ajunge la server.";
+    } catch (caught) {
+      // Motivul exact (de exemplu „Load failed” când iOS taie cererea) ajunge în jurnalul de erori, ca să se vadă de pe laptop.
+      const why = caught instanceof Error ? caught.message : String(caught);
+      return `Eroare: nu am putut ajunge la server (${path.split("?")[0]}: ${why.slice(0, 80)}).`;
     } finally {
       setWorking((count) => count - 1);
     }
@@ -470,6 +473,12 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       const fact = asText(parameters.fapt);
       if (!fact) return "Lipsește faptul.";
       return callApi("/api/memorie", "POST", { fapt: fact });
+    },
+    biblioteca_citeste: (parameters: { tab?: unknown }) => callApi(`/api/biblioteca?tab=${encodeURIComponent(asText(parameters.tab))}`),
+    biblioteca_noteaza: (parameters: { tab?: unknown; sectiune?: unknown; text?: unknown }) => {
+      const text = asText(parameters.text);
+      if (!text) return "Lipsește textul.";
+      return callApi("/api/biblioteca", "POST", { tab: asText(parameters.tab), sectiune: asText(parameters.sectiune), text });
     },
     memorie_uita: async (parameters: { fapt?: unknown }) => {
       const fact = asText(parameters.fapt);
@@ -1024,6 +1033,11 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
       // implicit oprit
     }
     const params = new URLSearchParams(window.location.search);
+    // Widgetul de pe iPhone deschide deciziile: ele stau acum pe ecranul „Echipa”.
+    if (params.get("ecran") === "decizii") {
+      window.location.replace("/echipa");
+      return;
+    }
     if (params.get("masina") === "1" || params.get("mod") === "masina") {
       saved = true;
       try {
@@ -1385,8 +1399,12 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
     if (!tool) return { type: "tool_result", tool_use_id: block.id, content: "Unealta nu există.", is_error: true };
     try {
       const result = await tool(block.input as never);
-      return { type: "tool_result", tool_use_id: block.id, content: String(result ?? "Gata.") };
-    } catch {
+      const text = String(result ?? "Gata.");
+      // Orice unealtă care dă eroare se notează la server: așa o văd și o repar fără ca Daniel să mi-o trimită.
+      if (text.startsWith("Eroare")) reportError(`${block.name}: ${text}`, "unealtă");
+      return { type: "tool_result", tool_use_id: block.id, content: text };
+    } catch (caught) {
+      reportError(`${block.name}: ${caught instanceof Error ? caught.message : String(caught)}`, "unealtă");
       return { type: "tool_result", tool_use_id: block.id, content: "Unealta a dat eroare.", is_error: true };
     }
   }
@@ -1991,6 +2009,9 @@ function Assistant({ googleConnected, spotifyConnected }: { googleConnected: boo
           <span className="brand-mark">A</span>
           <span className="brand-name">ARGUS</span>
         </div>
+        <a className="team-toggle" href="/echipa">
+          Echipa
+        </a>
         <button className="work-toggle" onClick={openProjects} aria-expanded={projectsOpen}>
           Lucrări{activeProjects ? ` · ${activeProjects}` : ""}
           {laptopOff !== null && <span className="laptop-off"> · laptop oprit</span>}

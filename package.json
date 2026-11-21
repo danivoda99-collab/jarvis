@@ -11,7 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.134.0",
     "@elevenlabs/react": "1.18.0",
-    "next": "^16.4.0",
+    "next": "^16.4.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "0.128.0",

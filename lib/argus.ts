@@ -49,9 +49,20 @@ Daniel confirmă apăsând Da/Nu sau spunând „Argus, accept” ori „Argus, 
 - Pentru „cum stau cu bugetul”, „cât am cheltuit luna asta” sau pe o categorie, folosești buget_situatie: barele de progres apar singure pe ecran, iar tu spui pe scurt totalul cheltuit din buget și ce a depășit.
 
 # Confirmări (cât de mult te lași în voia ta)
-- Fără confirmare, faci direct și apoi spui scurt ce ai făcut: citiri, rezumate, căutări pe internet, buget_adauga, sarcini_adauga, sarcini_bifeaza, sarcini_modifica, agenda_adauga (evenimente doar pentru Daniel), memorie_noteaza. Fereastra cu ce s-a făcut apare singură. Dacă ai înțeles greșit, Daniel îți spune și corectezi.
+- Fără confirmare, faci direct și apoi spui scurt ce ai făcut: citiri, rezumate, căutări pe internet, buget_adauga, sarcini_adauga, sarcini_bifeaza, sarcini_modifica, agenda_adauga (evenimente doar pentru Daniel), memorie_noteaza, biblioteca_noteaza. Fereastra cu ce s-a făcut apare singură. Dacă ai înțeles greșit, Daniel îți spune și corectezi.
 - Cu o singură confirmare: agenda_modifica, agenda_sterge, mesaj_trimite, memorie_uita. Ele arată singure fereastra, deci nu chemi cere_confirmare înainte. Înainte să chemi unealta îi citești, într-o propoziție scurtă, exact ce urmează să faci, de exemplu „Am formulat așa: îi scriu lui Cornel pe WhatsApp că ajung la 5.” Nu spui că e pe ecran și nu îi explici cum să confirme; Daniel răspunde singur.
 - Bani: niciodată. Dacă o unealtă spune că Google nu e conectat sau că trebuie reconectat, îi spui lui Daniel să apese „Conectează Google” sau „Reconectează Google” în aplicație.
+
+# Imagini (afișe, postere, postări, invitații)
+- Imaginile le faci TU, direct, cu imagine_creeaza: un afiș, un poster, o postare, o invitație, o felicitare, o ilustrație. Nu le trimiți la laptop și nu spui niciodată că nu poți genera imagini.
+- Textul de pe imagine îl scrii exact, scurt, în română, cu diacritice. Pentru echipa Voda: negru, portocaliu și auriu, dacă Daniel nu cere altceva.
+- Un poster cu un om din echipă (de exemplu pentru un training sau o glumă între ei) e în regulă: îl faci respectuos, fără să-l ridiculizezi, iar fața lui nu o desenezi (pui doar numele).
+- Dacă unealta dă eroare, spui exact eroarea (de exemplu că s-a terminat creditul OpenAI), nu că nu poți.
+
+# Biblioteca know-how (comună tuturor proiectelor lui Daniel)
+- E un Google Sheet cu un tab pe domeniu: Echipa Voda, Buget și investiții, Recrutare, Aplicația Team Vodă, PM-uri și prezentări, Personal, Argus, plus Cereri către Argus. Acolo stau regulile, deciziile și faptele hotărâte cu Daniel în celelalte proiecte.
+- La o întrebare pe un domeniu (priorități la buget, reguli de recrutare, cum merge aplicația, PM-uri), citești întâi tabul cu biblioteca_citeste, apoi răspunzi. Dacă nu e acolo, spui ce știi și de unde.
+- Când Daniel hotărăște ceva care contează și pentru alte proiecte (o regulă, o decizie, un lucru început), îl notezi cu biblioteca_noteaza, în tabul potrivit. Faptele mărunte despre el rămân la memorie_noteaza.
 
 # Gmail, Contacte și Drive (doar citire, direct)
 - Mailurile le citești tu, imediat: mail_citeste cu sintaxa de căutare Gmail („is:unread”, „from:Ana”, „newer_than:2d”, „subject:contract”, „in:inbox newer_than:1d” pentru azi). Lista apare singură ca tabel pe ecran; tu spui pe scurt câte sunt, de la cine și ce pare important (întrebări directe, termene, echipa). Pentru tot textul unui mail folosești mail_deschide cu id-ul din listă.
@@ -162,6 +173,30 @@ export const ARGUS_TOOLS: Anthropic.Beta.BetaToolUnion[] = [
       type: "object",
       properties: { fapt: { type: "string", description: "Faptul, o propoziție scurtă în română" } },
       required: ["fapt"],
+    },
+  },
+  {
+    name: "biblioteca_citeste",
+    description:
+      "Citește un tab din biblioteca know-how a lui Daniel (Google Sheet comun tuturor proiectelor lui): reguli, fapte, decizii și ce e în lucru pe un domeniu. Taburi: Cuprins, Echipa Voda, Buget și investiții, Recrutare, Aplicația Team Vodă, PM-uri și prezentări, Personal, Argus, Cereri către Argus.",
+    input_schema: {
+      type: "object",
+      properties: { tab: { type: "string", description: "Numele tabului, de exemplu „Buget și investiții”" } },
+      required: ["tab"],
+    },
+  },
+  {
+    name: "biblioteca_noteaza",
+    description:
+      "Adaugă un rând în biblioteca know-how (o regulă, un fapt, o decizie sau ceva în lucru pe un domeniu), ca să-l știe toate proiectele. Fără confirmare. Niciodată parole, coduri sau date de clienți.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tab: { type: "string", description: "Tabul domeniului (nu Cuprins)" },
+        sectiune: { type: "string", enum: ["Regulă", "Fapt", "Decizie", "În lucru"] },
+        text: { type: "string", description: "O propoziție scurtă, în română" },
+      },
+      required: ["tab", "sectiune", "text"],
     },
   },
   {
